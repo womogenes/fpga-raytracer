@@ -1,3 +1,4 @@
+
 // Top-level renderer
 
 #include <stdio.h>
@@ -15,9 +16,9 @@ float fb_float[HEIGHT][WIDTH][3];
 int main() {
   Camera cam = (Camera){
     .origin  = {0, 0, -10},
-    .forward = {0, 0, WIDTH / 2 * 2.28},
+    .forward = {0, WIDTH / 2 * 2.28, 0},
     .right = {WIDTH / 2, 0, 0},
-    .up = {0, HEIGHT / 2, 0},
+    .up = {0, 0, HEIGHT / 2},
   };
   
   RayTracerParams params;

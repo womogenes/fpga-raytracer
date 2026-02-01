@@ -28,7 +28,7 @@ parser.add_argument("scene", nargs="?", type=str)
 args = parser.parse_args()
 
 # Communication Parameters
-SERIAL_PORTNAME = "/dev/ttyUSB0"  # CHANGE ME to match your system's serial port name!
+SERIAL_PORTNAME = "/dev/ttyUSB2"  # CHANGE ME to match your system's serial port name!
 BAUD = 115200  # Make sure this matches your UART receiver
 
 
@@ -135,6 +135,8 @@ if __name__ == "__main__":
 
     # Flash objects
     objs = scene["objects"]
+    print(f"Flashing {len(objs)} objects")
+
     for idx, obj in enumerate(objs):
         # Look up material index in dictionary
         obj["mat_idx"] = mat_name2idx[obj["material"]]

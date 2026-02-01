@@ -6,7 +6,7 @@
 #include "ray_intersector.c"
 #include "ray_reflector.c"
 
-#define MAX_BOUNCES 10
+#define MAX_BOUNCES 5
 
 void ray_tracer(RayTracerParams* params, RayTracerResult* result) {
   Vec3 ray_pos = params->ray_origin;
