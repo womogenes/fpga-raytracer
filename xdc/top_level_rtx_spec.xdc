@@ -1,5 +1,4 @@
 # RTX-specific net constraints
-# Keep pin/IO constraints in `xdc/top_level.xdc`
 
 # Allow combinational loop for ring oscillator RNG
 # TODO: clean this up / make less hierarchy-fragile

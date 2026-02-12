@@ -37,7 +37,7 @@ set sources_sv [ concat \
     [ glob ./hdl/uart/*.sv ] \
     [ glob ./hdl/mem/*.sv ] \
     [ glob ./hdl/seven_seg/*.sv ] \
-    [ glob ./hdl/top_level_test.sv ] \
+    [ glob ./hdl/top_level_dram.sv ] \
 ]
 read_verilog -sv $sources_sv
 

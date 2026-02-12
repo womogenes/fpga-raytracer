@@ -31,6 +31,7 @@ set_property -dict { PACKAGE_PIN M19 IOSTANDARD LVCMOS12 } [get_ports { "btn[1]"
 set_property -dict { PACKAGE_PIN M20 IOSTANDARD LVCMOS12 } [get_ports { "btn[2]" }]; #IO_L20P_T3_16 Sch=btnl
 set_property -dict { PACKAGE_PIN C19 IOSTANDARD LVCMOS12 } [get_ports { "btn[3]" }]; #IO_L6P_T0_16 Sch=btnr
 set_property -dict { PACKAGE_PIN B19 IOSTANDARD LVCMOS12 } [get_ports { "btn[4]" }]; #IO_0_16 Sch=btnu
+set_property -dict { PACKAGE_PIN R19 IOSTANDARD LVCMOS33 } [get_ports { cpu_resetn }]
 
 ## USER SLIDE SWITCH
 set_property -dict { PACKAGE_PIN G19  IOSTANDARD LVCMOS12 } [get_ports { sw[0] }]; #IO_L22P_T3_16 Sch=sw[0]
@@ -97,8 +98,8 @@ set_property -dict { PACKAGE_PIN AB24 IOSTANDARD TMDS_33 } [get_ports {hdmi_tx_p
 # UART over micro-USB signals
 # labeled from the perspective of the FPGA!
 # note the inversion from RealDigital official documentation.
-set_property -dict {PACKAGE_PIN Y20 IOSTANDARD LVCMOS33} [get_ports {uart_rxd}]
-set_property -dict {PACKAGE_PIN Y23 IOSTANDARD LVCMOS33} [get_ports {uart_txd}]
+set_property -dict { PACKAGE_PIN Y20 IOSTANDARD LVCMOS33 } [get_ports {uart_rxd}]
+set_property -dict { PACKAGE_PIN Y23 IOSTANDARD LVCMOS33 } [get_ports { uart_txd }]
 
 # MICRO SD SPI signals
 # set_property -dict {PACKAGE_PIN M16 IOSTANDARD LVCMOS33} [get_ports {sd_cipo}]

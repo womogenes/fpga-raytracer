@@ -53,9 +53,9 @@ if {[llength $sources_v] > 0 } {
 
 # read in constraint files:
 # - Shared pin/IO constraints live in `xdc/top_level.xdc`.
-# - RTX-only net constraints live in `xdc/rtx_net_constraints.xdc`.
+# - RTX-only net constraints live in `xdc/top_level_rtx_spec.xdc`.
 read_xdc ./xdc/top_level.xdc
-read_xdc ./xdc/rtx_net_constraints.xdc
+read_xdc ./xdc/top_level_rtx_spec.xdc
 
 # read in all (if any) hex memory files:
 set sources_mem [ glob -nocomplain ./data/*.mem ]
