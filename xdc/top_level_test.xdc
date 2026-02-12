@@ -1,0 +1,50 @@
+# Genesys 2 constraints for `hdl/top_level_test.sv` (HDMI solid-color test).
+#
+# Keep this minimal: no DDR3 constraints, no RTX net constraints.
+
+# Genesys2 system clock (200MHz differential SYSCLK_P/N on AD12/AD11)
+set_property -dict { PACKAGE_PIN AD12 IOSTANDARD LVDS } [get_ports { sysclk_p }]
+set_property -dict { PACKAGE_PIN AD11 IOSTANDARD LVDS } [get_ports { sysclk_n }]
+create_clock -add -name sysclk_200mhz -period 5.000 -waveform {0 2.5} [get_ports { sysclk_p }]
+
+# USER GREEN LEDS (3.3V VCCO)
+set_property -dict { PACKAGE_PIN T28   IOSTANDARD LVCMOS33 } [get_ports { led[0] }]
+set_property -dict { PACKAGE_PIN V19   IOSTANDARD LVCMOS33 } [get_ports { led[1] }]
+set_property -dict { PACKAGE_PIN U30   IOSTANDARD LVCMOS33 } [get_ports { led[2] }]
+set_property -dict { PACKAGE_PIN U29   IOSTANDARD LVCMOS33 } [get_ports { led[3] }]
+set_property -dict { PACKAGE_PIN V20   IOSTANDARD LVCMOS33 } [get_ports { led[4] }]
+set_property -dict { PACKAGE_PIN V26   IOSTANDARD LVCMOS33 } [get_ports { led[5] }]
+set_property -dict { PACKAGE_PIN W24   IOSTANDARD LVCMOS33 } [get_ports { led[6] }]
+set_property -dict { PACKAGE_PIN W23   IOSTANDARD LVCMOS33 } [get_ports { led[7] }]
+
+# USER PUSH BUTTONS (1.2V bank)
+set_property -dict { PACKAGE_PIN E18 IOSTANDARD LVCMOS12 } [get_ports { "btn[0]" }]
+set_property -dict { PACKAGE_PIN M19 IOSTANDARD LVCMOS12 } [get_ports { "btn[1]" }]
+set_property -dict { PACKAGE_PIN M20 IOSTANDARD LVCMOS12 } [get_ports { "btn[2]" }]
+set_property -dict { PACKAGE_PIN C19 IOSTANDARD LVCMOS12 } [get_ports { "btn[3]" }]
+set_property -dict { PACKAGE_PIN B19 IOSTANDARD LVCMOS12 } [get_ports { "btn[4]" }]
+
+# USER SLIDE SWITCHES
+set_property -dict { PACKAGE_PIN G19  IOSTANDARD LVCMOS12 } [get_ports { sw[0] }]
+set_property -dict { PACKAGE_PIN G25  IOSTANDARD LVCMOS12 } [get_ports { sw[1] }]
+set_property -dict { PACKAGE_PIN H24  IOSTANDARD LVCMOS12 } [get_ports { sw[2] }]
+set_property -dict { PACKAGE_PIN K19  IOSTANDARD LVCMOS12 } [get_ports { sw[3] }]
+set_property -dict { PACKAGE_PIN N19  IOSTANDARD LVCMOS12 } [get_ports { sw[4] }]
+set_property -dict { PACKAGE_PIN P19  IOSTANDARD LVCMOS12 } [get_ports { sw[5] }]
+set_property -dict { PACKAGE_PIN P26  IOSTANDARD LVCMOS33 } [get_ports { sw[6] }]
+set_property -dict { PACKAGE_PIN P27  IOSTANDARD LVCMOS33 } [get_ports { sw[7] }]
+
+# HDMI out (TMDS)
+set_property -dict { PACKAGE_PIN AB20 IOSTANDARD TMDS_33 } [get_ports { hdmi_clk_n }]
+set_property -dict { PACKAGE_PIN AA20 IOSTANDARD TMDS_33 } [get_ports { hdmi_clk_p }]
+set_property -dict { PACKAGE_PIN AC21 IOSTANDARD TMDS_33 } [get_ports { hdmi_tx_n[0] }]
+set_property -dict { PACKAGE_PIN AC20 IOSTANDARD TMDS_33 } [get_ports { hdmi_tx_p[0] }]
+set_property -dict { PACKAGE_PIN AA23 IOSTANDARD TMDS_33 } [get_ports { hdmi_tx_n[1] }]
+set_property -dict { PACKAGE_PIN AA22 IOSTANDARD TMDS_33 } [get_ports { hdmi_tx_p[1] }]
+set_property -dict { PACKAGE_PIN AC25 IOSTANDARD TMDS_33 } [get_ports { hdmi_tx_n[2] }]
+set_property -dict { PACKAGE_PIN AB24 IOSTANDARD TMDS_33 } [get_ports { hdmi_tx_p[2] }]
+
+# Global bitstream settings (keep consistent with main XDC)
+set_property BITSTREAM.CONFIG.UNUSEDPIN PULLUP [current_design]
+set_property BITSTREAM.GENERAL.COMPRESS TRUE [current_design]
+

@@ -1,0 +1,8 @@
+[project]
+name = "fpga-raytracer"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "cocotb<2",
+    "numpy>=2.4.2",
+]

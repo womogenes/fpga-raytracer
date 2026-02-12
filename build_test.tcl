@@ -37,7 +37,7 @@ set sources_sv [ concat \
     [ glob ./hdl/uart/*.sv ] \
     [ glob ./hdl/mem/*.sv ] \
     [ glob ./hdl/seven_seg/*.sv ] \
-    [ glob ./hdl/top_level_rtx.sv ] \
+    [ glob ./hdl/top_level_test.sv ] \
 ]
 read_verilog -sv $sources_sv
 
@@ -52,10 +52,8 @@ if {[llength $sources_v] > 0 } {
 }
 
 # read in constraint files:
-# - Shared pin/IO constraints live in `xdc/top_level.xdc`.
-# - RTX-only net constraints live in `xdc/rtx_net_constraints.xdc`.
-read_xdc ./xdc/top_level.xdc
-read_xdc ./xdc/rtx_net_constraints.xdc
+# Use the minimal pin/IO constraints for the HDMI test top-level.
+read_xdc ./xdc/top_level_test.xdc
 
 # read in all (if any) hex memory files:
 set sources_mem [ glob -nocomplain ./data/*.mem ]

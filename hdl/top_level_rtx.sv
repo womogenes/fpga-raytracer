@@ -3,17 +3,15 @@
 `define FPATH(X) `"X`"
 
 module top_level (
-  input wire clk_100mhz, // crystal reference clock
+  // Genesys 2 provides a 200MHz differential system clock (SYSCLK_P/N).
+  // We derive a local 100MHz clock from it to keep the rest of the design
+  // (UART baud assumptions + existing clock wizards) unchanged.
+  input wire sysclk_p,
+  input wire sysclk_n,
   input wire [7:0] sw, // all 8 input slide switches
 
   input wire [4:0] btn, // all four momentary button switches
   output logic [7:0] led, // 8 green output LEDs (located right above switches)
-
-  // seven-segment outputs
-  // output logic [3:0] ss0_an,
-  // output logic [3:0] ss1_an,
-  // output logic [6:0] ss0_c,
-  // output logic [6:0] ss1_c,
 
   // HDMI, UART peripherals etc
   output logic [2:0] hdmi_tx_p, // hdmi output signals (positives) (blue, green, red)
@@ -23,7 +21,7 @@ module top_level (
   // UART
   input wire uart_rxd,
 
-  //SDRAM (DDR3) ports
+  // SDRAM (DDR3) ports
   inout wire [15:0]   ddr3_dq, //data input/output
   inout wire [1:0]    ddr3_dqs_n, //data input/output differential strobe (negative)
   inout wire [1:0]    ddr3_dqs_p, //data input/output differential strobe (positive)
@@ -39,6 +37,16 @@ module top_level (
   output wire [1:0]   ddr3_dm, //data mask
   output wire         ddr3_odt //on-die termination (helps impedance match)
 );
+  wire clk_100mhz;
+  wire sysclk_locked;
+
+  clkwiz sysclk_wiz (
+    .sysclk_p  (sysclk_p),
+    .sysclk_n  (sysclk_n),
+    .clk_100mhz(clk_100mhz),
+    .locked    (sysclk_locked)
+  );
+
   // buffered clock signal (we need this apparently)
   logic clk_100mhz_buffered;
  
@@ -168,7 +176,10 @@ module top_level (
     flash_obj_data = uart_flash_data;   // auto-truncated (i hope)
   end
 
-  scene_buffer #(.INIT_FILE("scene_buffer.mem")) scene_buf (
+  // Note: Vivado resolves $readmem paths relative to the run directory.
+  // Using an explicit repo-relative path keeps synthesis/bitgen from silently
+  // dropping the initialization.
+  scene_buffer #(.INIT_FILE("data/scene_buffer.mem")) scene_buf (
     .clk(clk_rtx),
     .rst(sys_rst),
     .num_objs(num_objs),
@@ -194,7 +205,7 @@ module top_level (
     flash_mat_data = uart_flash_data;
   end
 
-  material_dictionary #(.INIT_FILE("mat_dict.mem")) mat_dict (
+  material_dictionary #(.INIT_FILE("data/mat_dict.mem")) mat_dict (
     .clk(clk_rtx),
     .rst(sys_rst),
     .flash_mat_wen(flash_mat_wen),

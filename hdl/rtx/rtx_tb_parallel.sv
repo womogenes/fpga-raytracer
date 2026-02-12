@@ -35,14 +35,14 @@ module rtx_tb_parallel #(
 
   // Initialize scene buffer
   // Bind inputs to ray tracer
-  scene_buffer #(.INIT_FILE("scene_buffer.mem")) scene_buf (
+  scene_buffer #(.INIT_FILE("data/scene_buffer.mem")) scene_buf (
     .clk(clk),
     .rst(rst),
     .num_objs(num_objs),
     .obj(obj)
   );
 
-  material_dictionary #(.INIT_FILE("mat_dict.mem")) mat_dict (
+  material_dictionary #(.INIT_FILE("data/mat_dict.mem")) mat_dict (
     .clk(clk),
     .rst(rst),
     .mat_idx(mat_dict_idx),

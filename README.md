@@ -29,7 +29,12 @@ If you want to test this for yourself in hardware:
    ```
    time vivado -mode batch -source build_rtx.tcl -nojournal -log "obj/vivado.log"
    ```
-   or using the Vivado GUI (though I prefer the command-line version)
+   or using the Vivado GUI (though I prefer the command-line version). When synthesizing for the Genesys 2 board, the part is `xc7k325t-ffg900-2`. If running Vivado in Docker, we currently need to run
+   ```sh
+   export LD_PRELOAD=/lib/x86_64-linux-gnu/libudev.so.1
+   vivado -mode batch -source build_rtx.tcl -nojournal -log obj/vivado.log
+   ```
+   (source: https://myon.info/blog/2024/07/06/vivado-docker)
 4. Run
    ```
    python ctrl/make_scene_buffer.py <scene_file.json>
@@ -37,7 +42,11 @@ If you want to test this for yourself in hardware:
    to create `data/mat_dict.mem` and `data/scene_buffer.mem`, which are required for build (else you'll render a black screen). The canonical json we used for testing is `ctrl/scenes/canonical_balls.json.`
 5. Flash to the board with
    ```
-   openFPGALoader -b nexysVideo obj/final.bit
+   # Genesys 2:
+   openFPGALoader -b genesys2 obj/final.bit
+
+   # Nexys Video:
+   # openFPGALoader -b nexysVideo obj/final.bit
    ```
 6. Hook up the board to a display via HDMI
 7. (Optional) Install cocotb and pyserial (and a few other things; I need to add a `requirements.txt` at some point) and flash new scenes with
@@ -51,6 +60,47 @@ If you want to test this for yourself in hardware:
    with the right port name.
 
 If you don't have the Nexys video, a comparable board will work provided it has enough logic slices, HDMI output, and sufficient DRAM. You will need to modify `xdc/top_level.xdc` with the right pinout labels. We based ours off of `https://github.com/Digilent/digilent-xdc/blob/master/Nexys-Video-Master.xdc` as well as somee file that Joe gave us.
+
+## Migrating from Nexys Video to Genesys 2
+
+A bunch of pins changed in `xdc/top_level.xdc` and Codex figured out the new pattern as well as clocking. Roughly the process was:
+
+1. Start from an authoritative Genesys 2 pin list for the "normal" peripherals (LEDs, switches, buttons, HDMI, UART, PMODs).
+   Digilent publishes a master constraints file that is basically a big pin dictionary:
+   - https://github.com/Digilent/digilent-xdc/blob/master/Genesys-2-Master.xdc
+   - raw: https://raw.githubusercontent.com/Digilent/digilent-xdc/master/Genesys-2-Master.xdc
+
+2. Match constraints to *our* top-level port names.
+   The easiest way to get bogus constraints is to paste an XDC from somewhere else and keep port names like `sysclk_p` / `uart_txd` / `pmoda` that don't exist in the RTL. We checked `module top_level (...)` in `hdl/top_level_rtx.sv` and made sure every `get_ports { ... }` in `xdc/top_level.xdc` matches a real port.
+
+3. DDR3 is special: the Digilent master XDC does not include DDR3.
+   For DDR3 you need either:
+   - the board schematic pin tables (Genesys 2 schematic is "DL500-300", rev H.1), and/or
+   - MIG-generated constraints from a known-good Genesys 2 project.
+
+   We ended up replacing our hand-written DDR3 pinout with MIG-generated constraints (SSTL15 / DIFF_SSTL15, proper pins, slew, etc). This is the class of fix that gets rid of the "this IO bank can't be placed" / BIVC-1 style errors during `place_design`.
+
+   Background docs (worth a skim if you want to understand what MIG is doing):
+   - 7-series MIG: https://docs.amd.com/r/en-US/pg150-mig-7series
+
+4. Clocking changed: Genesys 2 uses a 200MHz differential system clock.
+   The Genesys 2 "SYSCLK_P/N" pins are `AD12/AD11` (shown in the Digilent master XDC under "Clock Signal"). Our design historically expected a 100MHz single-ended clock input, so we did two things:
+   - constrain `sysclk_p/n` in `xdc/top_level.xdc` and `create_clock` it at 200MHz
+   - change the RTL so `top_level` takes `sysclk_p/n` and generates an internal 100MHz clock with an MMCM
+
+   The clock plumbing is in `hdl/clock/clkwiz.sv` (IBUFGDS -> MMCME2_BASE -> BUFG). Xilinx clocking reference:
+   - https://docs.amd.com/r/en-US/ug472_7Series_Clocking
+
+5. Iterate by running Vivado until DRC + bitgen pass.
+   The useful error mapping we leaned on:
+   - `UCIO-1` / `NSTD-1`: you forgot to LOC/IOSTANDARD a top-level port (we hit this on the clock early on)
+   - `BIVC-1`: you mixed incompatible IOSTANDARDs in the same bank (fix by using the board's VCCO + matching IOSTANDARD)
+
+6. Flashing changes too: `openFPGALoader` uses a different board id.
+   ```
+   openFPGALoader --list-boards | rg -i genesys
+   openFPGALoader -b genesys2 obj/final.bit
+   ```
 
 ## Project structure
 

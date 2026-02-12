@@ -12,6 +12,9 @@ obj*/
 sim/*.png
 sim/*.log
 
+# All log files
+*.log
+
 .claude/
 .vscode/
 
