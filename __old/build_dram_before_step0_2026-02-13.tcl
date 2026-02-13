@@ -1,3 +1,5 @@
+# Backup snapshot of `build_dram.tcl` prior to "incremental bring-up" work.
+# Taken 2026-02-13.
 
 #set limits (don't change unless you're running local):
 #if running remote, increasing threads will potentially cause your code to submission to get bounced
@@ -12,7 +14,7 @@ set_param general.maxThreads 16
 
 # set partNum xc7a200t-fbg484-1
 set partNum xc7k325t-ffg900-2
-set outputDir obj_rtx
+set outputDir obj_dram
 file mkdir $outputDir
 set files [glob -nocomplain "$outputDir/*"]
 # if {[llength $files] != 0} {
@@ -37,7 +39,7 @@ set sources_sv [ concat \
     [ glob ./hdl/uart/*.sv ] \
     [ glob ./hdl/mem/*.sv ] \
     [ glob ./hdl/seven_seg/*.sv ] \
-    [ glob ./hdl/top_level_rtx.sv ] \
+    [ glob ./hdl/top_level_dram.sv ] \
 ]
 read_verilog -sv $sources_sv
 
@@ -52,10 +54,7 @@ if {[llength $sources_v] > 0 } {
 }
 
 # read in constraint files:
-# - Shared pin/IO constraints live in `xdc/top_level.xdc`.
-# - RTX-only net constraints live in `xdc/top_level_rtx_spec.xdc`.
 read_xdc ./xdc/top_level.xdc
-read_xdc ./xdc/top_level_rtx_spec.xdc
 
 # read in all (if any) hex memory files:
 set sources_mem [ glob -nocomplain ./data/*.mem ]
@@ -109,3 +108,4 @@ report_drc -file $outputDir/post_imp_drc.rpt
 #set_property SEVERITY {Warning} [get_drc_checks NSTD-1]
 #write_verilog -force $outputDir/cpu_impl_netlist.v -mode timesim -sdf_anno true
 write_bitstream -force $outputDir/final.bit
+

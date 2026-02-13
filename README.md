@@ -27,12 +27,13 @@ If you want to test this for yourself in hardware:
 2. Install Xilinx Vivado (nontrivial; will add instructions later)
 3. Synthesize with
    ```
-   time vivado -mode batch -source build_rtx.tcl -nojournal -log "obj/vivado.log"
+   mkdir -p obj_rtx
+   time vivado -mode batch -source build_rtx.tcl -nojournal -log vivado_rtx.log
    ```
    or using the Vivado GUI (though I prefer the command-line version). When synthesizing for the Genesys 2 board, the part is `xc7k325t-ffg900-2`. If running Vivado in Docker, we currently need to run
    ```sh
    export LD_PRELOAD=/lib/x86_64-linux-gnu/libudev.so.1
-   vivado -mode batch -source build_rtx.tcl -nojournal -log obj/vivado.log
+   vivado -mode batch -source build_rtx.tcl -nojournal -log vivado_rtx.log
    ```
    (source: https://myon.info/blog/2024/07/06/vivado-docker)
 4. Run
@@ -42,11 +43,11 @@ If you want to test this for yourself in hardware:
    to create `data/mat_dict.mem` and `data/scene_buffer.mem`, which are required for build (else you'll render a black screen). The canonical json we used for testing is `ctrl/scenes/canonical_balls.json.`
 5. Flash to the board with
    ```
-   # Genesys 2:
-   openFPGALoader -b genesys2 obj/final.bit
+   # Genesys 2
+   openFPGALoader -b genesys2 obj_rtx/final.bit
 
-   # Nexys Video:
-   # openFPGALoader -b nexysVideo obj/final.bit
+   # Nexys Video
+   # openFPGALoader -b nexysVideo obj_rtx/final.bit
    ```
 6. Hook up the board to a display via HDMI
 7. (Optional) Install cocotb and pyserial (and a few other things; I need to add a `requirements.txt` at some point) and flash new scenes with
@@ -63,43 +64,43 @@ If you don't have the Nexys video, a comparable board will work provided it has 
 
 ## Migrating from Nexys Video to Genesys 2
 
-A bunch of pins changed in `xdc/top_level.xdc` and Codex figured out the new pattern as well as clocking. Roughly the process was:
+The working Genesys 2 port of the full raytracer (`hdl/top_level_rtx.sv`) required four main changes:
 
-1. Start from an authoritative Genesys 2 pin list for the "normal" peripherals (LEDs, switches, buttons, HDMI, UART, PMODs).
-   Digilent publishes a master constraints file that is basically a big pin dictionary:
-   - https://github.com/Digilent/digilent-xdc/blob/master/Genesys-2-Master.xdc
-   - raw: https://raw.githubusercontent.com/Digilent/digilent-xdc/master/Genesys-2-Master.xdc
+- Clocking (Genesys 2 SYSCLK is 200MHz differential):
+  - Change `top_level` to take `sysclk_p/sysclk_n` instead of a single-ended `clk_100mhz`.
+  - Add an MMCM-based divider (`hdl/clock/clkwiz.sv`) to derive a 100MHz internal clock for the rest of the design.
+  - Update `xdc/top_level.xdc` to LOC `sysclk_p/n` and `create_clock` it at 200MHz (Genesys 2 SYSCLK pins are `AD12/AD11`).
 
-2. Match constraints to *our* top-level port names.
-   The easiest way to get bogus constraints is to paste an XDC from somewhere else and keep port names like `sysclk_p` / `uart_txd` / `pmoda` that don't exist in the RTL. We checked `module top_level (...)` in `hdl/top_level_rtx.sv` and made sure every `get_ports { ... }` in `xdc/top_level.xdc` matches a real port.
+- XDC/pinout (Genesys 2 peripherals + DDR3 IO standards):
+  - Update `xdc/top_level.xdc` for Genesys 2 LED/switch/button/HDMI/UART pins (Digilent master XDC is a good starting point: https://github.com/Digilent/digilent-xdc/blob/master/Genesys-2-Master.xdc).
+  - Add DDR3 constraints for the lower 16-bit subset (SSTL15 / DIFF_SSTL15). Avoid MIG-style `*_T_DCI` IOSTANDARDs here; we had to use plain `SSTL15` to get a reliable build/boot.
+  - Set `BITSTREAM.CONFIG.UNUSEDPIN PULLNONE` to avoid weak pulls on DDR3-connected "unused" pins interfering with training.
+  - Ensure `sw[6]`/`sw[7]` are constrained as `LVCMOS33` (Genesys 2 bank voltage).
+  - If Vivado warns "set_property expects at least one object", an XDC `get_ports { ... }` doesn't match any RTL port name.
 
-3. DDR3 is special: the Digilent master XDC does not include DDR3.
-   For DDR3 you need either:
-   - the board schematic pin tables (Genesys 2 schematic is "DL500-300", rev H.1), and/or
-   - MIG-generated constraints from a known-good Genesys 2 project.
+- DDR3 interface correctness (Genesys 2 MT41J256M16-class wiring):
+  - Wire `ddr3_cs_n` and include `A[14]` (`ddr3_addr[14:0]`) through `top_level` and the framebuffer wrapper.
+  - Configure the DDR3 top accordingly (`ROW_BITS=15`, `SDRAM_CAPACITY=4`, `ODELAY_SUPPORTED=1`, `BIST_MODE=0`).
 
-   We ended up replacing our hand-written DDR3 pinout with MIG-generated constraints (SSTL15 / DIFF_SSTL15, proper pins, slew, etc). This is the class of fix that gets rid of the "this IO bank can't be placed" / BIVC-1 style errors during `place_design`.
+- Ring-oscillator RNG:
+  - Add `xdc/top_level_rtx_spec.xdc` with `ALLOW_COMBINATORIAL_LOOPS` for the ring-oscillator nets, and read it from `build_rtx.tcl`.
 
-   Background docs (worth a skim if you want to understand what MIG is doing):
-   - 7-series MIG: https://docs.amd.com/r/en-US/pg150-mig-7series
+Repro steps on Genesys 2 (once pins/clocks are correct):
 
-4. Clocking changed: Genesys 2 uses a 200MHz differential system clock.
-   The Genesys 2 "SYSCLK_P/N" pins are `AD12/AD11` (shown in the Digilent master XDC under "Clock Signal"). Our design historically expected a 100MHz single-ended clock input, so we did two things:
-   - constrain `sysclk_p/n` in `xdc/top_level.xdc` and `create_clock` it at 200MHz
-   - change the RTL so `top_level` takes `sysclk_p/n` and generates an internal 100MHz clock with an MMCM
-
-   The clock plumbing is in `hdl/clock/clkwiz.sv` (IBUFGDS -> MMCME2_BASE -> BUFG). Xilinx clocking reference:
-   - https://docs.amd.com/r/en-US/ug472_7Series_Clocking
-
-5. Iterate by running Vivado until DRC + bitgen pass.
-   The useful error mapping we leaned on:
-   - `UCIO-1` / `NSTD-1`: you forgot to LOC/IOSTANDARD a top-level port (we hit this on the clock early on)
-   - `BIVC-1`: you mixed incompatible IOSTANDARDs in the same bank (fix by using the board's VCCO + matching IOSTANDARD)
-
-6. Flashing changes too: `openFPGALoader` uses a different board id.
+1. Generate the scene init files:
    ```
-   openFPGALoader --list-boards | rg -i genesys
-   openFPGALoader -b genesys2 obj/final.bit
+   python ctrl/make_scene_buffer.py ctrl/scenes/canonical_balls.json
+   ```
+   This generates `data/scene_buffer.mem` and `data/mat_dict.mem` which the RTL reads during synthesis/bitgen.
+2. Build the raytracer bitstream:
+   ```
+   mkdir -p obj_rtx
+   vivado -mode batch -source build_rtx.tcl -nojournal -log vivado_rtx.log
+   ```
+   (If running Vivado in Docker, the `LD_PRELOAD` workaround in the build section still applies.)
+3. Flash:
+   ```
+   openFPGALoader -b genesys2 obj_rtx/final.bit
    ```
 
 ## Project structure

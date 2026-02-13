@@ -23,20 +23,13 @@ set files [glob -nocomplain "$outputDir/*"]
 #     puts "$outputDir is empty"
 # }
 
-# read in all system verilog files:
+# Step 0 build: keep the design as small as possible.
+# We'll add DRAM-related sources back one chunk at a time.
 set sources_sv [ concat \
     [ glob ./hdl/constants.sv ] \
     [ glob ./hdl/pipeline.sv ] \
     [ glob ./hdl/clock/*.sv ] \
     [ glob ./hdl/hdmi/*.sv ] \
-    [ glob ./hdl/types/*.sv ] \
-    [ glob ./hdl/math/*.sv ] \
-    [ glob ./hdl/rng/*.sv ] \
-    [ glob ./hdl/rtx/*.sv ] \
-    [ glob ./hdl/dram/*.sv ] \
-    [ glob ./hdl/uart/*.sv ] \
-    [ glob ./hdl/mem/*.sv ] \
-    [ glob ./hdl/seven_seg/*.sv ] \
     [ glob ./hdl/top_level_dram.sv ] \
 ]
 read_verilog -sv $sources_sv
@@ -44,15 +37,13 @@ read_verilog -sv $sources_sv
 # read in all (if any) verilog files:
 set sources_v [ concat \
     [ glob -nocomplain ./hdl/hdmi/*.v ] \
-    [ glob -nocomplain ./hdl/dram/*.v ] \
-    [ glob -nocomplain ./hdl/mem/*.v ] \
 ]
 if {[llength $sources_v] > 0 } {
     read_verilog $sources_v
 }
 
 # read in constraint files:
-read_xdc ./xdc/top_level.xdc
+read_xdc ./xdc/top_level_test.xdc
 
 # read in all (if any) hex memory files:
 set sources_mem [ glob -nocomplain ./data/*.mem ]
@@ -63,16 +54,7 @@ if {[llength $sources_mem] > 0} {
 # set the part number so Vivado knows how to build (each FPGA is different)
 set_part $partNum
 
-# Read in and synthesize all IP (first used in week 04!)
-set sources_ip [ glob -nocomplain -directory ./ip -tails * ]
-puts $sources_ip
-foreach ip_source $sources_ip {
-    if {[file isdirectory ./ip/$ip_source]} {
-	read_ip ./ip/$ip_source/$ip_source.xci
-    }
-}
-generate_target all [get_ips]
-synth_ip [get_ips]
+# IPs aren't needed for step 0.
 
 #Run Synthesis
 synth_design -top top_level -part $partNum -verbose

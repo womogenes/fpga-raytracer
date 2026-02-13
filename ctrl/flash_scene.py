@@ -1,23 +1,19 @@
 # We love python <3
 
 from pathlib import Path
+import os
 import sys
 
 proj_path = Path(__file__).parent.parent
 
 sys.path.append(str(proj_path / "sim"))
-from utils import make_fp, make_fp_vec3, pack_bits, FP_VEC3_BITS
-from make_scene_buffer import Material, Object, build_material_dict
+sys.path.append(str(Path(__file__).parent))  # allow local imports even with PYTHONSAFEPATH=1
+from utils import make_fp_vec3, FP_VEC3_BITS
+from make_scene_buffer import Object, build_material_dict
 
-import wave
 import serial
-import sys
 import json
 import numpy as np
-
-from tqdm import tqdm
-
-from struct import unpack
 import time
 
 from argparse import ArgumentParser
@@ -28,12 +24,14 @@ parser.add_argument("scene", nargs="?", type=str)
 args = parser.parse_args()
 
 # Communication Parameters
-SERIAL_PORTNAME = "/dev/ttyUSB2"  # CHANGE ME to match your system's serial port name!
+SERIAL_PORTNAME = os.environ.get("FPGA_SERIAL_PORT") or "/dev/ttyUSB2"  # CHANGE ME
 BAUD = 115200  # Make sure this matches your UART receiver
 
 
 if __name__ == "__main__":
-    ser = serial.Serial(SERIAL_PORTNAME, BAUD)
+    # write_timeout prevents hanging forever if the device disappears mid-stream.
+    ser = serial.Serial(SERIAL_PORTNAME, BAUD, write_timeout=5)
+    CAM_NUM_BYTES = (FP_VEC3_BITS + 7) // 8
 
     # ser.write((0b10000000).to_bytes(1))
     # print((FP_VEC3_BITS + 7) // 8)
@@ -54,7 +52,7 @@ if __name__ == "__main__":
 
             ser.write((cmd).to_bytes(1, "big"))
             data = make_fp_vec3(vec)
-            ser.write(data.to_bytes((FP_VEC3_BITS + 7) // 8, "big"))
+            ser.write(data.to_bytes(CAM_NUM_BYTES, "big"))
 
     def set_obj(obj_idx: int, obj: Object):
         obj_bits, obj_num_bits = obj.pack_bits()
@@ -146,3 +144,8 @@ if __name__ == "__main__":
     set_num_objs(len(objs))
 
     set_max_bounces(int(scene["max_bounces"]))
+
+    # Important on macOS: don't exit until bytes drain
+    ser.flush()
+    time.sleep(0.5)
+    ser.close()

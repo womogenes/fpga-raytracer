@@ -4,5 +4,9 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "cocotb<2",
+    "matplotlib>=3.10.8",
     "numpy>=2.4.2",
+    "pyserial>=3.5",
+    "tqdm>=4.67.3",
+    "trimesh>=4.11.2",
 ]
