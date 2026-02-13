@@ -9,6 +9,12 @@ create_clock -add -name sysclk_200mhz -period 5.000 -waveform {0 2.5} [get_ports
 # set_property CFGBVS VCCO [current_design]
 # set_property CONFIG_VOLTAGE 3.3 [current_design]
 
+# Genesys2 DDR3 is a 32-bit interface, while this project currently uses only a
+# 16-bit subset. The "unused" FPGA pins that still connect to the DDR3 chip(s)
+# must not be weakly pulled up/down by default, or they can interfere with DDR3
+# training. Set all unused pins to high-impedance.
+set_property BITSTREAM.CONFIG.UNUSEDPIN PULLNONE [current_design]
+
 # Optional cross-domain constraints
 # The HDMI pixel clock (74.25MHz) and DDR controller clock (83.33MHz) are produced
 # by different MMCMs and are not phase-related. All crossings between these domains
@@ -370,7 +376,9 @@ set_property PACKAGE_PIN AK9 [get_ports {ddr3_odt}]
 
 # GLOBAL CONFIGURATIONS
 
-set_property BITSTREAM.CONFIG.UNUSEDPIN PULLUP [current_design]
+# IMPORTANT: keep unused pins high-Z.
+# (Genesys2 DDR3 is x32; this design currently uses a x16 subset.)
+set_property BITSTREAM.CONFIG.UNUSEDPIN PULLNONE [current_design]
 set_property BITSTREAM.GENERAL.COMPRESS TRUE [current_design]
 
 # Genesys2 DDR3 uses external VREF0V75 (do not set INTERNAL_VREF unless you

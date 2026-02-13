@@ -111,7 +111,7 @@ module high_definition_frame_buffer(
     logic         memrequest_rdy;
 
 
-    // this traffic generator handles reads and writes issued to the MIG IP,
+    // this traffic generator handles reads and writes issued to the DDR3 controller,
     // which in turn handles the bus to the DDR chip.
     traffic_generator traffic_generator_inst(
         .memrequest_addr         (memrequest_addr),
@@ -131,7 +131,7 @@ module high_definition_frame_buffer(
         .write_axis_ready       (rtx_memclk_axis_tready),
         .write_axis_tlast       (rtx_memclk_axis_tlast),
 
-        .debug(debug),
+        .debug(),
 
         .read_axis_data         (display_memclk_axis_tdata),
         .read_axis_tlast        (display_memclk_axis_tlast),
@@ -139,6 +139,12 @@ module high_definition_frame_buffer(
         .read_axis_af           (display_memclk_axis_prog_full),
         .read_axis_ready        (display_memclk_axis_tready) //,
     );
+
+    // Expose a couple key DDR3 health signals for bringup.
+    // - calib_complete: training finished, controller should accept requests
+    // - memrequest_busy: wishbone stall from DDR3 controller
+    logic calib_complete;
+    logic uart_tx_unused;
 
     ddr3_top #(
         .CONTROLLER_CLK_PERIOD(12_000), //ps, clock period of the controller interface
@@ -151,9 +157,16 @@ module high_definition_frame_buffer(
         .WB2_ADDR_BITS(32), //width of 2nd wishbone address bus
         .WB2_DATA_BITS(32), //width of 2nd wishbone data bus
         .MICRON_SIM(0), //enable faster simulation for micron ddr3 model (shorten POWER_ON_RESET_HIGH and INITIAL_CKE_LOW)
-        .ODELAY_SUPPORTED(0), //set to 1 when ODELAYE2 is supported
+        // Kintex-7 supports ODELAYE2; enabling it is generally required for
+        // reliable high-speed DDR3 operation on real hardware.
+        .ODELAY_SUPPORTED(1),
         .SECOND_WISHBONE(0), //set to 1 if 2nd wishbone is needed
         .ECC_ENABLE(0), // set to 1 or 2 to add ECC (1 = Side-band ECC per burst, 2 = Side-band ECC per 8 bursts , 3 = Inline ECC )
+        // Important for bringup: disable the controller's built-in self-test.
+        // The default BIST_MODE runs through *all* address space which can keep
+        // the wishbone interface stalled for a very long time (looks like "no
+        // DRAM data" on the HDMI side).
+        .BIST_MODE(0),
         .WB_ERROR(0) // set to 1 to support Wishbone error (asserts at ECC double bit error)
       ) ddr3_top
       (
@@ -196,7 +209,12 @@ module high_definition_frame_buffer(
         .io_ddr3_dqs_n(ddr3_dqs_n),
         .o_ddr3_dm(ddr3_dm),
         .o_ddr3_odt(ddr3_odt), // on-die termination
-        .o_debug1()
+        .o_calib_complete(calib_complete),
+        .o_debug1(),
+
+        // Keep user-controlled self refresh disabled.
+        .i_user_self_refresh(1'b0),
+        .uart_tx(uart_tx_unused)
         //.o_debug1(o_debug1)
       );
 
@@ -252,6 +270,23 @@ module high_definition_frame_buffer(
     end
 
     assign frame_buff_dram = frame_buff_tvalid ? frame_buff_tdata : 16'h2277;
+
+    // Debug bits (clk_controller domain signals are sampled asynchronously by LEDs;
+    // this is fine for coarse bringup).
+    // [5] calib_complete
+    // [4] memrequest_busy (wishbone stall)
+    // [3] memrequest_en (wishbone strobe)
+    // [2] memrequest_complete (wishbone ack)
+    // [1] display_axis_tvalid (data present in pixel domain FIFO)
+    // [0] frame_buff_tvalid (pixel valid out of unstacker)
+    assign debug = {
+        calib_complete,
+        memrequest_busy,
+        memrequest_en,
+        memrequest_complete,
+        display_axis_tvalid,
+        frame_buff_tvalid
+    };
 
 endmodule
 

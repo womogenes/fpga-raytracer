@@ -86,38 +86,103 @@ module top_level (
   logic sys_rst;
   assign sys_rst = sw[0] ? 1'b0 : sys_rst_btn_pix_pol;
 
-  // --- DDR3 ports "present but inert" (for isolation testing) ---
-  // If these outputs are left completely unconnected, Vivado may constant-drive
-  // them, and the DIFF_SSTL15 constraint on the clock pins will fail DRC unless
-  // they are part of a true differential buffer. So: explicitly tri-state all
-  // DDR3 output pins. This keeps the DDR3 pin bank configured but avoids
-  // toggling/driving anything while we confirm the HDMI path still works.
-  logic ddr3_out_t;
-  assign ddr3_out_t = 1'b1; // 1=tri-state
+  // --- DDR3 + framebuffer readout ---
+  // sw[2]=0: known-good HDMI solid fill (isolate HDMI)
+  // sw[2]=1: show DRAM contents (raw framebuffer reads)
+  //
+  // Note: DDR3 I/O standards in `xdc/top_level.xdc` were adjusted to remove the
+  // *_T_DCI variants; those settings were preventing the FPGA from reaching DONE
+  // during configuration on this board.
+  logic clk_controller;
+  logic clk_ddr3;
+  logic clk_ddr3_90;
+  logic clk_camera;
+  logic lab06_clk_locked;
 
-  genvar gi;
-  generate
-    for (gi = 0; gi < 14; gi = gi + 1) begin : gen_ddr3_addr_ts
-      OBUFT ddr3_addr_buf (.I(1'b0), .T(ddr3_out_t), .O(ddr3_addr[gi]));
-    end
-    for (gi = 0; gi < 3; gi = gi + 1) begin : gen_ddr3_ba_ts
-      OBUFT ddr3_ba_buf (.I(1'b0), .T(ddr3_out_t), .O(ddr3_ba[gi]));
-    end
-    for (gi = 0; gi < 2; gi = gi + 1) begin : gen_ddr3_dm_ts
-      OBUFT ddr3_dm_buf (.I(1'b0), .T(ddr3_out_t), .O(ddr3_dm[gi]));
-    end
-  endgenerate
+  // Use the existing internal 100MHz clock as our "rtx/write-side" clock.
+  // (We keep rtx_valid=0 for now, so we won't write.)
+  wire clk_rtx;
+  assign clk_rtx = clk_100mhz;
 
-  OBUFT ddr3_ras_buf     (.I(1'b0), .T(ddr3_out_t), .O(ddr3_ras_n));
-  OBUFT ddr3_cas_buf     (.I(1'b0), .T(ddr3_out_t), .O(ddr3_cas_n));
-  OBUFT ddr3_we_buf      (.I(1'b0), .T(ddr3_out_t), .O(ddr3_we_n));
-  OBUFT ddr3_resetn_buf  (.I(1'b0), .T(ddr3_out_t), .O(ddr3_reset_n));
-  OBUFT ddr3_clke_buf    (.I(1'b0), .T(ddr3_out_t), .O(ddr3_clke));
-  OBUFT ddr3_odt_buf     (.I(1'b0), .T(ddr3_out_t), .O(ddr3_odt));
+  lab06_clk_wiz ddr3_clk_wiz (
+    .reset          (1'b0),
+    .clk_in1        (clk_100mhz),
+    .clk_controller (clk_controller),
+    .clk_ddr3       (clk_ddr3),
+    .clk_ddr3_90    (clk_ddr3_90),
+    .clk_camera     (clk_camera),
+    .clk_xc         (), // unused
+    .clk_passthrough(), // unused
+    .locked         (lab06_clk_locked)
+  );
 
-  // Differential DDR3 clock pins must be driven by a differential buffer (or
-  // explicitly tri-stated via OBUFTDS) to satisfy the DIFF_SSTL15 constraints.
-  OBUFTDS ddr3_ck_buf (.I(1'b0), .T(ddr3_out_t), .O(ddr3_clk_p), .OB(ddr3_clk_n));
+  // Sync the (pixel-domain) sys_rst into the DDR controller clock domain.
+  logic rst_ctrl_ff0;
+  logic rst_ctrl_ff1;
+  always_ff @(posedge clk_controller) begin
+    rst_ctrl_ff0 <= sys_rst;
+    rst_ctrl_ff1 <= rst_ctrl_ff0;
+  end
+  logic sys_rst_controller;
+  assign sys_rst_controller = rst_ctrl_ff1;
+
+  // Sync reset into the write-side clock domain (even though we won't write yet).
+  logic rst_rtx_ff0;
+  logic rst_rtx_ff1;
+  always_ff @(posedge clk_rtx) begin
+    rst_rtx_ff0 <= sys_rst;
+    rst_rtx_ff1 <= rst_rtx_ff0;
+  end
+  logic sys_rst_rtx;
+  assign sys_rst_rtx = rst_rtx_ff1;
+
+  logic [15:0] frame_buff_dram;
+  logic [5:0] dram_debug;
+
+  high_definition_frame_buffer highdef_fb (
+    // Write-side (idle)
+    .clk_rtx      (clk_rtx),
+    .sys_rst_rtx  (sys_rst_rtx),
+    .rtx_valid    (1'b0),
+    .rtx_pixel    (16'h0000),
+    .rtx_h_count  (11'd0),
+    .rtx_v_count  (10'd0),
+    .rtx_overwrite(1'b0),
+
+    // Read-side (HDMI)
+    .clk_pixel       (clk_pixel),
+    .sys_rst_pixel   (sys_rst),
+    .active_draw_hdmi(active_draw_hdmi),
+    .h_count_hdmi    (h_count_hdmi),
+    .v_count_hdmi    (v_count_hdmi),
+    .frame_buff_dram (frame_buff_dram),
+
+    // DDR3 clocks/resets
+    .clk_controller  (clk_controller),
+    .clk_ddr3        (clk_ddr3),
+    .clk_ddr3_90     (clk_ddr3_90),
+    .i_ref_clk       (clk_camera),
+    .i_rst           (sys_rst_controller),
+    .ddr3_clk_locked (lab06_clk_locked),
+
+    .debug(dram_debug),
+
+    // DDR3 physical interface
+    .ddr3_dq      (ddr3_dq),
+    .ddr3_dqs_n   (ddr3_dqs_n),
+    .ddr3_dqs_p   (ddr3_dqs_p),
+    .ddr3_addr    (ddr3_addr),
+    .ddr3_ba      (ddr3_ba),
+    .ddr3_ras_n   (ddr3_ras_n),
+    .ddr3_cas_n   (ddr3_cas_n),
+    .ddr3_we_n    (ddr3_we_n),
+    .ddr3_reset_n (ddr3_reset_n),
+    .ddr3_clk_p   (ddr3_clk_p),
+    .ddr3_clk_n   (ddr3_clk_n),
+    .ddr3_clke    (ddr3_clke),
+    .ddr3_dm      (ddr3_dm),
+    .ddr3_odt     (ddr3_odt)
+  );
 
   logic [10:0] h_count_hdmi;
   logic [9:0] v_count_hdmi;
@@ -150,9 +215,25 @@ module top_level (
 
   always_comb begin
     if (active_draw_hdmi) begin
-      red = SOLID_R;
-      green = SOLID_G;
-      blue = SOLID_B;
+      if (sw[2]) begin
+        // DRAM visualization mode.
+        // If the DDR clock wizard isn't locked, show a loud red screen so it's
+        // obvious we're in DRAM mode but DDR clocks aren't running.
+        if (!lab06_clk_locked) begin
+          red = 8'hff;
+          green = 8'h00;
+          blue = 8'h00;
+        end else begin
+          // RGB565 -> RGB888 (simple zero-extend)
+          red = {frame_buff_dram[4:0], 3'b000};
+          green = {frame_buff_dram[10:5], 2'b00};
+          blue = {frame_buff_dram[15:11], 3'b000};
+        end
+      end else begin
+        red = SOLID_R;
+        green = SOLID_G;
+        blue = SOLID_B;
+      end
     end else begin
       red = 8'h00;
       green = 8'h00;
@@ -220,9 +301,21 @@ module top_level (
   OBUFDS OBUFDS_clock (.I(clk_pixel),      .O(hdmi_clk_p),   .OB(hdmi_clk_n));
 
   // LED debug:
+  // Default (sw[7]=0): same feel as the test top.
   // - led[7]: sysclk MMCM locked
   // - led[6]: HDMI MMCM locked
-  // - led[5:0]: frame counter (bit5 blinks ~0.5Hz if video is running)
-  assign led = {sysclk_locked, hdmi_clk_locked, frame_count};
+  // - led[5]: DDR3 clock wizard locked
+  // - led[4]: sw[2] (DRAM display mode)
+  // - led[3:0]: frame counter low bits
+  //
+  // Debug (sw[7]=1): show DDR3 pipeline health from `high_definition_frame_buffer`.
+  // - led[7]: sysclk MMCM locked
+  // - led[6]: HDMI MMCM locked
+  // - led[5:0]: highdef_fb.debug (see `high_definition_frame_buffer.sv`)
+  logic [7:0] led_normal;
+  logic [7:0] led_debug;
+  assign led_normal = {sysclk_locked, hdmi_clk_locked, lab06_clk_locked, sw[2], frame_count[3:0]};
+  assign led_debug = {sysclk_locked, hdmi_clk_locked, dram_debug};
+  assign led = sw[7] ? led_debug : led_normal;
 
 endmodule
