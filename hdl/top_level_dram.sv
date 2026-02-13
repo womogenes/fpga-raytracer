@@ -17,7 +17,23 @@ module top_level (
   output logic [2:0] hdmi_tx_p,
   output logic [2:0] hdmi_tx_n,
   output logic hdmi_clk_p,
-  output logic hdmi_clk_n
+  output logic hdmi_clk_n,
+
+  // SDRAM (DDR3) ports (lower 16-bit of Genesys2's 32-bit DDR3 interface)
+  inout wire [15:0] ddr3_dq, // data input/output
+  inout wire [1:0] ddr3_dqs_n, // differential strobe (negative)
+  inout wire [1:0] ddr3_dqs_p, // differential strobe (positive)
+  output wire [13:0] ddr3_addr, // address
+  output wire [2:0] ddr3_ba, // bank address
+  output wire ddr3_ras_n, // row active strobe
+  output wire ddr3_cas_n, // column active strobe
+  output wire ddr3_we_n, // write enable
+  output wire ddr3_reset_n, // reset (active low)
+  output wire ddr3_clk_p, // differential clock (p)
+  output wire ddr3_clk_n, // differential clock (n)
+  output wire ddr3_clke, // clock enable
+  output wire [1:0] ddr3_dm, // data mask
+  output wire ddr3_odt // on-die termination
 );
   wire clk_100mhz;
   wire sysclk_locked;
@@ -70,6 +86,39 @@ module top_level (
   logic sys_rst;
   assign sys_rst = sw[0] ? 1'b0 : sys_rst_btn_pix_pol;
 
+  // --- DDR3 ports "present but inert" (for isolation testing) ---
+  // If these outputs are left completely unconnected, Vivado may constant-drive
+  // them, and the DIFF_SSTL15 constraint on the clock pins will fail DRC unless
+  // they are part of a true differential buffer. So: explicitly tri-state all
+  // DDR3 output pins. This keeps the DDR3 pin bank configured but avoids
+  // toggling/driving anything while we confirm the HDMI path still works.
+  logic ddr3_out_t;
+  assign ddr3_out_t = 1'b1; // 1=tri-state
+
+  genvar gi;
+  generate
+    for (gi = 0; gi < 14; gi = gi + 1) begin : gen_ddr3_addr_ts
+      OBUFT ddr3_addr_buf (.I(1'b0), .T(ddr3_out_t), .O(ddr3_addr[gi]));
+    end
+    for (gi = 0; gi < 3; gi = gi + 1) begin : gen_ddr3_ba_ts
+      OBUFT ddr3_ba_buf (.I(1'b0), .T(ddr3_out_t), .O(ddr3_ba[gi]));
+    end
+    for (gi = 0; gi < 2; gi = gi + 1) begin : gen_ddr3_dm_ts
+      OBUFT ddr3_dm_buf (.I(1'b0), .T(ddr3_out_t), .O(ddr3_dm[gi]));
+    end
+  endgenerate
+
+  OBUFT ddr3_ras_buf     (.I(1'b0), .T(ddr3_out_t), .O(ddr3_ras_n));
+  OBUFT ddr3_cas_buf     (.I(1'b0), .T(ddr3_out_t), .O(ddr3_cas_n));
+  OBUFT ddr3_we_buf      (.I(1'b0), .T(ddr3_out_t), .O(ddr3_we_n));
+  OBUFT ddr3_resetn_buf  (.I(1'b0), .T(ddr3_out_t), .O(ddr3_reset_n));
+  OBUFT ddr3_clke_buf    (.I(1'b0), .T(ddr3_out_t), .O(ddr3_clke));
+  OBUFT ddr3_odt_buf     (.I(1'b0), .T(ddr3_out_t), .O(ddr3_odt));
+
+  // Differential DDR3 clock pins must be driven by a differential buffer (or
+  // explicitly tri-stated via OBUFTDS) to satisfy the DIFF_SSTL15 constraints.
+  OBUFTDS ddr3_ck_buf (.I(1'b0), .T(ddr3_out_t), .O(ddr3_clk_p), .OB(ddr3_clk_n));
+
   logic [10:0] h_count_hdmi;
   logic [9:0] v_count_hdmi;
   logic h_sync;
@@ -90,7 +139,7 @@ module top_level (
     .frame_count(frame_count)
   );
 
-  // Solid fill: RGB = 0d7a31
+  // Solid fill: RGB = 0d7a31 (known-good test pattern)
   localparam logic [7:0] SOLID_R = 8'h0d;
   localparam logic [7:0] SOLID_G = 8'h7a;
   localparam logic [7:0] SOLID_B = 8'h31;

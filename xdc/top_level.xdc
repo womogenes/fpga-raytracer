@@ -10,6 +10,14 @@ create_clock -add -name sysclk_200mhz -period 5.000 -waveform {0 2.5} [get_ports
 # set_property CONFIG_VOLTAGE 3.3 [current_design]
 
 # Optional cross-domain constraints
+# The HDMI pixel clock (74.25MHz) and DDR controller clock (83.33MHz) are produced
+# by different MMCMs and are not phase-related. All crossings between these domains
+# are via async FIFOs, so treat the clocks as asynchronous for timing analysis.
+set_clock_groups -asynchronous \
+  -group [get_clocks clk_pixel_cw_hdmi] \
+  -group [get_clocks clk_controller_clk_wiz_0]
+
+# (Older/alternative approach kept for reference)
 # set_max_delay -datapath_only 6 -from [get_clocks clk_controller_clk_wiz_0] -to [get_clocks clk_pixel_cw_hdmi]
 # set_max_delay -datapath_only 6 -from [get_clocks clk_pixel_cw_hdmi] -to [get_clocks clk_controller_clk_wiz_0]
 # set_max_delay -datapath_only 6 -from [get_clocks clk_controller_clk_wiz_0] -to [get_clocks clk_passthrough_clk_wiz_0]
@@ -118,85 +126,86 @@ set_property -dict { PACKAGE_PIN Y23 IOSTANDARD LVCMOS33 } [get_ports { uart_txd
 ### exposes only a 16-bit bus (`ddr3_dq[15:0]`, `ddr3_dm[1:0]`, `ddr3_dqs_[1:0]`),
 ### so we constrain only the lower 16 bits here.
 
-## DQ[0:15] (SSTL15_T_DCI)
+## DQ[0:15] (SSTL15)
+## TODO: figure out SSTL15_T_DCI (og) vs SSTL15 (hack?)
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dq[0]}]
 set_property SLEW FAST [get_ports {ddr3_dq[0]}]
-set_property IOSTANDARD SSTL15_T_DCI [get_ports {ddr3_dq[0]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_dq[0]}]
 set_property PACKAGE_PIN AD3 [get_ports {ddr3_dq[0]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dq[1]}]
 set_property SLEW FAST [get_ports {ddr3_dq[1]}]
-set_property IOSTANDARD SSTL15_T_DCI [get_ports {ddr3_dq[1]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_dq[1]}]
 set_property PACKAGE_PIN AC2 [get_ports {ddr3_dq[1]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dq[2]}]
 set_property SLEW FAST [get_ports {ddr3_dq[2]}]
-set_property IOSTANDARD SSTL15_T_DCI [get_ports {ddr3_dq[2]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_dq[2]}]
 set_property PACKAGE_PIN AC1 [get_ports {ddr3_dq[2]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dq[3]}]
 set_property SLEW FAST [get_ports {ddr3_dq[3]}]
-set_property IOSTANDARD SSTL15_T_DCI [get_ports {ddr3_dq[3]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_dq[3]}]
 set_property PACKAGE_PIN AC5 [get_ports {ddr3_dq[3]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dq[4]}]
 set_property SLEW FAST [get_ports {ddr3_dq[4]}]
-set_property IOSTANDARD SSTL15_T_DCI [get_ports {ddr3_dq[4]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_dq[4]}]
 set_property PACKAGE_PIN AC4 [get_ports {ddr3_dq[4]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dq[5]}]
 set_property SLEW FAST [get_ports {ddr3_dq[5]}]
-set_property IOSTANDARD SSTL15_T_DCI [get_ports {ddr3_dq[5]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_dq[5]}]
 set_property PACKAGE_PIN AD6 [get_ports {ddr3_dq[5]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dq[6]}]
 set_property SLEW FAST [get_ports {ddr3_dq[6]}]
-set_property IOSTANDARD SSTL15_T_DCI [get_ports {ddr3_dq[6]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_dq[6]}]
 set_property PACKAGE_PIN AE6 [get_ports {ddr3_dq[6]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dq[7]}]
 set_property SLEW FAST [get_ports {ddr3_dq[7]}]
-set_property IOSTANDARD SSTL15_T_DCI [get_ports {ddr3_dq[7]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_dq[7]}]
 set_property PACKAGE_PIN AC7 [get_ports {ddr3_dq[7]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dq[8]}]
 set_property SLEW FAST [get_ports {ddr3_dq[8]}]
-set_property IOSTANDARD SSTL15_T_DCI [get_ports {ddr3_dq[8]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_dq[8]}]
 set_property PACKAGE_PIN AF2 [get_ports {ddr3_dq[8]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dq[9]}]
 set_property SLEW FAST [get_ports {ddr3_dq[9]}]
-set_property IOSTANDARD SSTL15_T_DCI [get_ports {ddr3_dq[9]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_dq[9]}]
 set_property PACKAGE_PIN AE1 [get_ports {ddr3_dq[9]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dq[10]}]
 set_property SLEW FAST [get_ports {ddr3_dq[10]}]
-set_property IOSTANDARD SSTL15_T_DCI [get_ports {ddr3_dq[10]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_dq[10]}]
 set_property PACKAGE_PIN AF1 [get_ports {ddr3_dq[10]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dq[11]}]
 set_property SLEW FAST [get_ports {ddr3_dq[11]}]
-set_property IOSTANDARD SSTL15_T_DCI [get_ports {ddr3_dq[11]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_dq[11]}]
 set_property PACKAGE_PIN AE4 [get_ports {ddr3_dq[11]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dq[12]}]
 set_property SLEW FAST [get_ports {ddr3_dq[12]}]
-set_property IOSTANDARD SSTL15_T_DCI [get_ports {ddr3_dq[12]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_dq[12]}]
 set_property PACKAGE_PIN AE3 [get_ports {ddr3_dq[12]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dq[13]}]
 set_property SLEW FAST [get_ports {ddr3_dq[13]}]
-set_property IOSTANDARD SSTL15_T_DCI [get_ports {ddr3_dq[13]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_dq[13]}]
 set_property PACKAGE_PIN AE5 [get_ports {ddr3_dq[13]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dq[14]}]
 set_property SLEW FAST [get_ports {ddr3_dq[14]}]
-set_property IOSTANDARD SSTL15_T_DCI [get_ports {ddr3_dq[14]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_dq[14]}]
 set_property PACKAGE_PIN AF5 [get_ports {ddr3_dq[14]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dq[15]}]
 set_property SLEW FAST [get_ports {ddr3_dq[15]}]
-set_property IOSTANDARD SSTL15_T_DCI [get_ports {ddr3_dq[15]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_dq[15]}]
 set_property PACKAGE_PIN AF6 [get_ports {ddr3_dq[15]}]
 
 ## DM[0:1] (SSTL15)
@@ -210,25 +219,25 @@ set_property SLEW FAST [get_ports {ddr3_dm[1]}]
 set_property IOSTANDARD SSTL15 [get_ports {ddr3_dm[1]}]
 set_property PACKAGE_PIN AF3 [get_ports {ddr3_dm[1]}]
 
-## DQS[0:1] (DIFF_SSTL15_T_DCI)
+## DQS[0:1] (DIFF_SSTL15)
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dqs_p[0]}]
 set_property SLEW FAST [get_ports {ddr3_dqs_p[0]}]
-set_property IOSTANDARD DIFF_SSTL15_T_DCI [get_ports {ddr3_dqs_p[0]}]
+set_property IOSTANDARD DIFF_SSTL15 [get_ports {ddr3_dqs_p[0]}]
 set_property PACKAGE_PIN AD2 [get_ports {ddr3_dqs_p[0]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dqs_n[0]}]
 set_property SLEW FAST [get_ports {ddr3_dqs_n[0]}]
-set_property IOSTANDARD DIFF_SSTL15_T_DCI [get_ports {ddr3_dqs_n[0]}]
+set_property IOSTANDARD DIFF_SSTL15 [get_ports {ddr3_dqs_n[0]}]
 set_property PACKAGE_PIN AD1 [get_ports {ddr3_dqs_n[0]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dqs_p[1]}]
 set_property SLEW FAST [get_ports {ddr3_dqs_p[1]}]
-set_property IOSTANDARD DIFF_SSTL15_T_DCI [get_ports {ddr3_dqs_p[1]}]
+set_property IOSTANDARD DIFF_SSTL15 [get_ports {ddr3_dqs_p[1]}]
 set_property PACKAGE_PIN AG4 [get_ports {ddr3_dqs_p[1]}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_dqs_n[1]}]
 set_property SLEW FAST [get_ports {ddr3_dqs_n[1]}]
-set_property IOSTANDARD DIFF_SSTL15_T_DCI [get_ports {ddr3_dqs_n[1]}]
+set_property IOSTANDARD DIFF_SSTL15 [get_ports {ddr3_dqs_n[1]}]
 set_property PACKAGE_PIN AG3 [get_ports {ddr3_dqs_n[1]}]
 
 ## CK (renamed here as ddr3_clk_[p/n])

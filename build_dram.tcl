@@ -12,7 +12,7 @@ set_param general.maxThreads 16
 
 # set partNum xc7a200t-fbg484-1
 set partNum xc7k325t-ffg900-2
-set outputDir obj
+set outputDir obj_dram
 file mkdir $outputDir
 set files [glob -nocomplain "$outputDir/*"]
 # if {[llength $files] != 0} {
