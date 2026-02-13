@@ -37,6 +37,7 @@ module high_definition_frame_buffer(
 
     output logic [5:0] debug,
     output logic [4:0] calib_state,
+    output logic       ddr3_uart_tx,
     
     // Bus wires to connect FPGA to SDRAM chip
     inout wire [15:0]   ddr3_dq,      //data input/output
@@ -146,7 +147,10 @@ module high_definition_frame_buffer(
     // - o_debug1[4:0]: ddr3_controller's calibration state machine (state_calibrate)
     logic calib_complete;
     logic [31:0] ddr3_debug1;
-    logic uart_tx_unused;
+    // Optional UART debug stream from the DDR3 controller.
+    // Expose it to the top-level so we can inspect calibration failures without
+    // needing an ILA.
+    logic uart_tx_int;
 
     ddr3_top #(
         .CONTROLLER_CLK_PERIOD(12_000), //ps, clock period of the controller interface
@@ -156,6 +160,8 @@ module high_definition_frame_buffer(
         .BA_BITS(3), //width of bank address
         .BYTE_LANES(2), //number of DDR3 modules to be controlled
         .AUX_WIDTH(16), //width of aux line (must be >= 4)
+        // Genesys2 uses MT41J256M16 (256M x 16 = 4Gb) chips.
+        .SDRAM_CAPACITY(4),
         .WB2_ADDR_BITS(32), //width of 2nd wishbone address bus
         .WB2_DATA_BITS(32), //width of 2nd wishbone data bus
         .MICRON_SIM(0), //enable faster simulation for micron ddr3 model (shorten POWER_ON_RESET_HIGH and INITIAL_CKE_LOW)
@@ -216,7 +222,7 @@ module high_definition_frame_buffer(
 
         // Keep user-controlled self refresh disabled.
         .i_user_self_refresh(1'b0),
-        .uart_tx(uart_tx_unused)
+        .uart_tx(uart_tx_int)
         //.o_debug1(o_debug1)
       );
 
@@ -292,6 +298,8 @@ module high_definition_frame_buffer(
 
     // Calibration state from the DDR3 controller (see `ddr3_controller.sv`).
     assign calib_state = ddr3_debug1[4:0];
+
+    assign ddr3_uart_tx = uart_tx_int;
 
 endmodule
 

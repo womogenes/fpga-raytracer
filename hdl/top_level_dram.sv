@@ -33,7 +33,14 @@ module top_level (
   output wire ddr3_clk_n, // differential clock (n)
   output wire ddr3_clke, // clock enable
   output wire [1:0] ddr3_dm, // data mask
-  output wire ddr3_odt // on-die termination
+  output wire ddr3_odt, // on-die termination
+
+  // UART (optional: used for DDR3 controller debug prints)
+  input wire uart_rxd,
+  output logic uart_txd,
+
+  // Keep this deasserted; constrained in the Genesys2 master XDC.
+  output logic cpu_resetn
 );
   wire clk_100mhz;
   wire sysclk_locked;
@@ -44,6 +51,11 @@ module top_level (
     .clk_100mhz (clk_100mhz),
     .locked     (sysclk_locked)
   );
+
+  // Unused in this top, but keep constraints happy.
+  always_comb begin
+    cpu_resetn = 1'b1;
+  end
 
   // btn[0] acts as reset (same convention as other tops)
   logic sys_rst_btn;
@@ -139,6 +151,7 @@ module top_level (
   logic [15:0] frame_buff_dram;
   logic [5:0] dram_debug;
   logic [4:0] dram_calib_state;
+  logic ddr3_uart_tx;
 
   high_definition_frame_buffer highdef_fb (
     // Write-side (idle)
@@ -168,6 +181,7 @@ module top_level (
 
     .debug(dram_debug),
     .calib_state(dram_calib_state),
+    .ddr3_uart_tx(ddr3_uart_tx),
 
     // DDR3 physical interface
     .ddr3_dq      (ddr3_dq),
@@ -185,6 +199,12 @@ module top_level (
     .ddr3_dm      (ddr3_dm),
     .ddr3_odt     (ddr3_odt)
   );
+
+  // Drive the board UART TX with the DDR3 controller's debug stream.
+  // If UART debug is disabled in the controller, this will idle high.
+  always_comb begin
+    uart_txd = ddr3_uart_tx;
+  end
 
   logic [10:0] h_count_hdmi;
   logic [9:0] v_count_hdmi;

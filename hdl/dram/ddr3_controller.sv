@@ -49,7 +49,7 @@
 // Choose which debug message will be displayed via UART:
 // `define UART_DEBUG_READ_LEVEL
 // `define UART_DEBUG_WRITE_LEVEL
-// `define UART_DEBUG_ALIGN
+`define UART_DEBUG_ALIGN
 
 
 `ifdef UART_DEBUG_READ_LEVEL
