@@ -112,6 +112,9 @@ set_property -dict { PACKAGE_PIN AB24 IOSTANDARD TMDS_33 } [get_ports {hdmi_tx_p
 # UART over micro-USB signals
 # labeled from the perspective of the FPGA!
 # note the inversion from RealDigital official documentation.
+## USB-UART (per Digilent Genesys2 board part):
+## - FPGA RXD: Y20
+## - FPGA TXD: Y23
 set_property -dict { PACKAGE_PIN Y20 IOSTANDARD LVCMOS33 } [get_ports {uart_rxd}]
 set_property -dict { PACKAGE_PIN Y23 IOSTANDARD LVCMOS33 } [get_ports { uart_txd }]
 

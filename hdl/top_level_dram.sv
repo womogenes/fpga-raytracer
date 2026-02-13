@@ -202,10 +202,85 @@ module top_level (
     .ddr3_odt     (ddr3_odt)
   );
 
-  // Drive the board UART TX with the DDR3 controller's debug stream.
-  // If UART debug is disabled in the controller, this will idle high.
+  // UART TX:
+  // - sw[5]=0: top-level periodic debug line (always present, preferred for bringup)
+  // - sw[5]=1: pass through DDR3 controller's UART stream (if any)
+  logic uart_dbg_busy;
+  logic uart_dbg_en;
+  logic [7:0] uart_dbg_data;
+  logic uart_dbg_txd;
+
+  function automatic [7:0] hex_nibble_to_ascii(input logic [3:0] nib);
+    if (nib < 4'd10) hex_nibble_to_ascii = 8'd48 + nib; // '0'..'9'
+    else             hex_nibble_to_ascii = 8'd55 + nib; // 'A'..'F'
+  endfunction
+
+  // 115200 baud top-level debug serializer.
+  uart_tx #(
+    .BIT_RATE(115200),
+    .CLK_HZ(100_000_000),
+    .PAYLOAD_BITS(8),
+    .STOP_BITS(1)
+  ) uart_dbg_inst (
+    .clk(clk_100mhz),
+    .resetn(sysclk_locked), // hold in reset until sysclk MMCM locks
+    .uart_txd(uart_dbg_txd),
+    .uart_tx_busy(uart_dbg_busy),
+    .uart_tx_en(uart_dbg_en),
+    .uart_tx_data(uart_dbg_data)
+  );
+
+  // Periodically emit: "C<0/1> S<HH>\\n"
+  // C = calib_complete, S = state_calibrate (from UberDDR3 controller)
+  logic [26:0] uart_dbg_period_cnt;
+  logic uart_dbg_sending;
+  logic [2:0] uart_dbg_idx;
+  wire [7:0] uart_dbg_state8 = {3'b000, dram_calib_state};
+
+  always_ff @(posedge clk_100mhz) begin
+    uart_dbg_en <= 1'b0;
+    uart_dbg_data <= 8'h00;
+
+    if (!sysclk_locked) begin
+      uart_dbg_period_cnt <= '0;
+      uart_dbg_sending <= 1'b0;
+      uart_dbg_idx <= '0;
+    end else begin
+      // ~4 Hz
+      if (uart_dbg_period_cnt == 27'd25_000_000) begin
+        uart_dbg_period_cnt <= '0;
+        if (!uart_dbg_sending) begin
+          uart_dbg_sending <= 1'b1;
+          uart_dbg_idx <= '0;
+        end
+      end else begin
+        uart_dbg_period_cnt <= uart_dbg_period_cnt + 1'b1;
+      end
+
+      if (uart_dbg_sending && !uart_dbg_busy) begin
+        uart_dbg_en <= 1'b1;
+        case (uart_dbg_idx)
+          3'd0: uart_dbg_data <= 8'd67; // 'C'
+          3'd1: uart_dbg_data <= dram_debug[5] ? 8'd49 : 8'd48; // '1'/'0'
+          3'd2: uart_dbg_data <= 8'd32; // ' '
+          3'd3: uart_dbg_data <= 8'd83; // 'S'
+          3'd4: uart_dbg_data <= hex_nibble_to_ascii(uart_dbg_state8[7:4]);
+          3'd5: uart_dbg_data <= hex_nibble_to_ascii(uart_dbg_state8[3:0]);
+          default: uart_dbg_data <= 8'd10; // '\\n'
+        endcase
+
+        if (uart_dbg_idx == 3'd6) begin
+          uart_dbg_sending <= 1'b0;
+          uart_dbg_idx <= '0;
+        end else begin
+          uart_dbg_idx <= uart_dbg_idx + 1'b1;
+        end
+      end
+    end
+  end
+
   always_comb begin
-    uart_txd = ddr3_uart_tx;
+    uart_txd = sw[5] ? ddr3_uart_tx : uart_dbg_txd;
   end
 
   logic [10:0] h_count_hdmi;
