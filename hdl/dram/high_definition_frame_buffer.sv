@@ -36,6 +36,7 @@ module high_definition_frame_buffer(
     input wire          ddr3_clk_locked,
 
     output logic [5:0] debug,
+    output logic [4:0] calib_state,
     
     // Bus wires to connect FPGA to SDRAM chip
     inout wire [15:0]   ddr3_dq,      //data input/output
@@ -140,10 +141,11 @@ module high_definition_frame_buffer(
         .read_axis_ready        (display_memclk_axis_tready) //,
     );
 
-    // Expose a couple key DDR3 health signals for bringup.
+    // Expose key DDR3 health signals for bringup.
     // - calib_complete: training finished, controller should accept requests
-    // - memrequest_busy: wishbone stall from DDR3 controller
+    // - o_debug1[4:0]: ddr3_controller's calibration state machine (state_calibrate)
     logic calib_complete;
+    logic [31:0] ddr3_debug1;
     logic uart_tx_unused;
 
     ddr3_top #(
@@ -210,7 +212,7 @@ module high_definition_frame_buffer(
         .o_ddr3_dm(ddr3_dm),
         .o_ddr3_odt(ddr3_odt), // on-die termination
         .o_calib_complete(calib_complete),
-        .o_debug1(),
+        .o_debug1(ddr3_debug1),
 
         // Keep user-controlled self refresh disabled.
         .i_user_self_refresh(1'b0),
@@ -287,6 +289,9 @@ module high_definition_frame_buffer(
         display_axis_tvalid,
         frame_buff_tvalid
     };
+
+    // Calibration state from the DDR3 controller (see `ddr3_controller.sv`).
+    assign calib_state = ddr3_debug1[4:0];
 
 endmodule
 

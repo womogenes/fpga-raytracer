@@ -138,6 +138,7 @@ module top_level (
 
   logic [15:0] frame_buff_dram;
   logic [5:0] dram_debug;
+  logic [4:0] dram_calib_state;
 
   high_definition_frame_buffer highdef_fb (
     // Write-side (idle)
@@ -166,6 +167,7 @@ module top_level (
     .ddr3_clk_locked (lab06_clk_locked),
 
     .debug(dram_debug),
+    .calib_state(dram_calib_state),
 
     // DDR3 physical interface
     .ddr3_dq      (ddr3_dq),
@@ -312,10 +314,14 @@ module top_level (
   // - led[7]: sysclk MMCM locked
   // - led[6]: HDMI MMCM locked
   // - led[5:0]: highdef_fb.debug (see `high_definition_frame_buffer.sv`)
+  // - with sw[6]=1, show calibration state machine instead:
+  //   led[5]=calib_complete, led[4:0]=state_calibrate
   logic [7:0] led_normal;
   logic [7:0] led_debug;
+  logic [7:0] led_calib;
   assign led_normal = {sysclk_locked, hdmi_clk_locked, lab06_clk_locked, sw[2], frame_count[3:0]};
   assign led_debug = {sysclk_locked, hdmi_clk_locked, dram_debug};
-  assign led = sw[7] ? led_debug : led_normal;
+  assign led_calib = {sysclk_locked, hdmi_clk_locked, dram_debug[5], dram_calib_state};
+  assign led = sw[7] ? (sw[6] ? led_calib : led_debug) : led_normal;
 
 endmodule
