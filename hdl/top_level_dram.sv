@@ -23,7 +23,7 @@ module top_level (
   inout wire [15:0] ddr3_dq, // data input/output
   inout wire [1:0] ddr3_dqs_n, // differential strobe (negative)
   inout wire [1:0] ddr3_dqs_p, // differential strobe (positive)
-  output wire [13:0] ddr3_addr, // address
+  output wire [14:0] ddr3_addr, // address (A[14:0] for MT41J256M16)
   output wire [2:0] ddr3_ba, // bank address
   output wire ddr3_ras_n, // row active strobe
   output wire ddr3_cas_n, // column active strobe
@@ -32,6 +32,7 @@ module top_level (
   output wire ddr3_clk_p, // differential clock (p)
   output wire ddr3_clk_n, // differential clock (n)
   output wire ddr3_clke, // clock enable
+  output wire ddr3_cs_n, // chip select (active low)
   output wire [1:0] ddr3_dm, // data mask
   output wire ddr3_odt, // on-die termination
 
@@ -196,6 +197,7 @@ module top_level (
     .ddr3_clk_p   (ddr3_clk_p),
     .ddr3_clk_n   (ddr3_clk_n),
     .ddr3_clke    (ddr3_clke),
+    .ddr3_cs_n    (ddr3_cs_n),
     .ddr3_dm      (ddr3_dm),
     .ddr3_odt     (ddr3_odt)
   );

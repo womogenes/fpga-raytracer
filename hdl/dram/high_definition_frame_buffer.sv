@@ -43,7 +43,7 @@ module high_definition_frame_buffer(
     inout wire [15:0]   ddr3_dq,      //data input/output
     inout wire [1:0]    ddr3_dqs_n,   //data input/output differential strobe (negative)
     inout wire [1:0]    ddr3_dqs_p,   //data input/output differential strobe (positive)
-    output wire [13:0]  ddr3_addr,    //address
+    output wire [14:0]  ddr3_addr,    //address (A[14:0] for MT41J256M16)
     output wire [2:0]   ddr3_ba,      //bank address
     output wire         ddr3_ras_n,   //row active strobe
     output wire         ddr3_cas_n,   //column active strobe
@@ -52,6 +52,7 @@ module high_definition_frame_buffer(
     output wire         ddr3_clk_p,   //general differential clock (p)
     output wire         ddr3_clk_n,   //general differential clock (n)
     output wire         ddr3_clke,    //clock enable
+    output wire         ddr3_cs_n,    //chip select (active low)
     output wire [1:0]   ddr3_dm,      //data mask
     output wire         ddr3_odt      //on-die termination (helps impedance match)
 );
@@ -147,6 +148,7 @@ module high_definition_frame_buffer(
     // - o_debug1[4:0]: ddr3_controller's calibration state machine (state_calibrate)
     logic calib_complete;
     logic [31:0] ddr3_debug1;
+    wire [0:0] ddr3_cs_n_vec;
     // Optional UART debug stream from the DDR3 controller.
     // Expose it to the top-level so we can inspect calibration failures without
     // needing an ILA.
@@ -155,7 +157,7 @@ module high_definition_frame_buffer(
     ddr3_top #(
         .CONTROLLER_CLK_PERIOD(12_000), //ps, clock period of the controller interface
         .DDR3_CLK_PERIOD(3_000), //ps, clock period of the DDR3 RAM device (must be 1/4 of the CONTROLLER_CLK_PERIOD)
-        .ROW_BITS(14), //width of row address
+        .ROW_BITS(15), //width of row address (Genesys2 MT41J256M16 uses 15)
         .COL_BITS(10), //width of column address
         .BA_BITS(3), //width of bank address
         .BYTE_LANES(2), //number of DDR3 modules to be controlled
@@ -206,7 +208,7 @@ module high_definition_frame_buffer(
         .o_ddr3_clk_n(ddr3_clk_n),
         .o_ddr3_reset_n(ddr3_reset_n),
         .o_ddr3_cke(ddr3_clke), // CKE
-        .o_ddr3_cs_n(), // chip select signal (controls rank 1 only) tied to 0 on this board by default.
+        .o_ddr3_cs_n(ddr3_cs_n_vec), // chip select (active low)
         .o_ddr3_ras_n(ddr3_ras_n), // RAS#
         .o_ddr3_cas_n(ddr3_cas_n), // CAS#
         .o_ddr3_we_n(ddr3_we_n), // WE#
@@ -225,6 +227,8 @@ module high_definition_frame_buffer(
         .uart_tx(uart_tx_int)
         //.o_debug1(o_debug1)
       );
+
+    assign ddr3_cs_n = ddr3_cs_n_vec[0];
 
 
     logic [127:0] display_axis_tdata;

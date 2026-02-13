@@ -326,6 +326,11 @@ set_property SLEW FAST [get_ports {ddr3_addr[13]}]
 set_property IOSTANDARD SSTL15 [get_ports {ddr3_addr[13]}]
 set_property PACKAGE_PIN AA12 [get_ports {ddr3_addr[13]}]
 
+set_property VCCAUX_IO NORMAL [get_ports {ddr3_addr[14]}]
+set_property SLEW FAST [get_ports {ddr3_addr[14]}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_addr[14]}]
+set_property PACKAGE_PIN AH9 [get_ports {ddr3_addr[14]}]
+
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_ba[0]}]
 set_property SLEW FAST [get_ports {ddr3_ba[0]}]
 set_property IOSTANDARD SSTL15 [get_ports {ddr3_ba[0]}]
@@ -367,6 +372,11 @@ set_property VCCAUX_IO NORMAL [get_ports {ddr3_clke}]
 set_property SLEW FAST [get_ports {ddr3_clke}]
 set_property IOSTANDARD SSTL15 [get_ports {ddr3_clke}]
 set_property PACKAGE_PIN AJ9 [get_ports {ddr3_clke}]
+
+set_property VCCAUX_IO NORMAL [get_ports {ddr3_cs_n}]
+set_property SLEW FAST [get_ports {ddr3_cs_n}]
+set_property IOSTANDARD SSTL15 [get_ports {ddr3_cs_n}]
+set_property PACKAGE_PIN AH12 [get_ports {ddr3_cs_n}]
 
 set_property VCCAUX_IO NORMAL [get_ports {ddr3_odt}]
 set_property SLEW FAST [get_ports {ddr3_odt}]
