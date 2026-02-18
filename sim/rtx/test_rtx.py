@@ -124,8 +124,12 @@ def runner():
     build_test_args = ["-Wall"]
 
     build_dir = proj_path / "sim" / "sim_build"
-    shutil.copy(SCENE_BUF_MEM_PATH, build_dir / "scene_buffer.mem")
-    shutil.copy(MAT_DICT_MEM_PATH, build_dir / "mat_dict.mem")
+    build_data_dir = build_dir / "data"
+    os.makedirs(build_data_dir, exist_ok=True)
+
+    # HDL testbench expects INIT_FILE="data/<name>.mem" relative to run dir.
+    shutil.copy(SCENE_BUF_MEM_PATH, build_data_dir / "scene_buffer.mem")
+    shutil.copy(MAT_DICT_MEM_PATH, build_data_dir / "mat_dict.mem")
 
     # values for parameters defined earlier in the code.
     parameters = {

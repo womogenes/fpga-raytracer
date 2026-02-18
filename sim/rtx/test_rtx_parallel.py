@@ -27,7 +27,8 @@ import time
 from PIL import Image
 from tqdm import tqdm
 
-sys.path.append(Path(__file__).resolve().parent.parent._str)
+sys.path.append(str(Path(__file__).resolve().parent))
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent / "ctrl"))
 
 from utils import make_fp_vec3, pack_bits, FP_BITS, FP_VEC3_BITS
@@ -203,9 +204,9 @@ def build_verilator():
     """Build Verilator executable once (called from main process)."""
     print(f"Building Verilator for {WIDTH}x{HEIGHT}...")
 
-    # Copy scene buffer to build dir
-    shutil.copy(SCENE_BUF_MEM_PATH, BUILD_DIR / "scene_buffer.mem")
-    shutil.copy(MAT_DICT_MEM_PATH, BUILD_DIR / "mat_dict.mem")
+    os.makedirs(BUILD_DIR / "data", exist_ok=True)
+    shutil.copy(SCENE_BUF_MEM_PATH, BUILD_DIR / "data" / "scene_buffer.mem")
+    shutil.copy(MAT_DICT_MEM_PATH, BUILD_DIR / "data" / "mat_dict.mem")
 
     runner = get_runner(SIM)
     runner.build(
