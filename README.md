@@ -7,15 +7,11 @@ This repo contains the source code for [@womogenes](https://github.com/womogenes
 
 Here's a test scene we made in Blender than flashed to the FPGA (it took about 24 minutes to render fully):
 
-<center>
-<img src="https://cdn.discordapp.com/attachments/1312647913213530223/1448456347225161759/IMG_0024.jpg?ex=69808a58&is=697f38d8&hm=6d904f176e5d2dac2c951b2ab3fc70fa1ac6d7eff7e3b2383f53fd0495724930&">
-</center>
+![](gallery/chess.png)
 
-The core design is in SystemVerilog, though we have build files and tooling specifically for the [Nexys Video](https://digilent.com/reference/programmable-logic/nexys-video/start) board, which contains the Artix-7 FPGA with 13 Mbits of on-chip BRAM and 512 MB of DDR3 DRAM.
+The core design is in SystemVerilog, though we have build files and tooling specifically for the [Genesys 2](https://digilent.com/shop/genesys-2-amd-kintex-7-fpga-development-board), which contains the Kintex-7 FPGA with 16 Mbits of BRAM and and 1 GB of DDR3 DRAM.
 
-<center>
-<img src="https://cdn.discordapp.com/attachments/1312647913213530223/1448483570057220138/IMG_0025.jpg?ex=6980a3b2&is=697f5232&hm=ef170720a4ac38976904231dfea3e840b4dbf8eb9500a670d6230c226128dddd&" width="400">
-</center>
+Prior to February 2026, we used to primarily support the [Nexys Video](https://digilent.com/reference/programmable-logic/nexys-video/start), which contains the Artix-7 FPGA with 13 Mbits of on-chip BRAM and 512 MB of DDR3 DRAM.
 
 For the first ~10 weeks we used the [Real Digital Urbana Board](https://www.realdigital.org/hardware/urbana) which had fewer LUTs. Build files exist in git history somewhere.
 
@@ -23,19 +19,17 @@ For the first ~10 weeks we used the [Real Digital Urbana Board](https://www.real
 
 If you want to test this for yourself in hardware:
 
-1. Buy a Nexys Video board ($540). If you want to use a cheaper board the LUT usdage might not work.
+1. Secure a Genesys 2 board ($1099), or a Nexys Video board ($540) and go back to commit `27255c7`.
 2. Install Xilinx Vivado (nontrivial; will add instructions later)
 3. Synthesize with
    ```
-   mkdir -p obj_rtx
-   time vivado -mode batch -source build_rtx.tcl -nojournal -log vivado_rtx.log
+   time vivado -mode batch -source build_rtx.tcl -nojournal -log "obj/vivado.log"
    ```
    or using the Vivado GUI (though I prefer the command-line version). When synthesizing for the Genesys 2 board, the part is `xc7k325t-ffg900-2`. If running Vivado in Docker, we currently need to run
    ```sh
    export LD_PRELOAD=/lib/x86_64-linux-gnu/libudev.so.1
-   vivado -mode batch -source build_rtx.tcl -nojournal -log vivado_rtx.log
    ```
-   (source: https://myon.info/blog/2024/07/06/vivado-docker)
+   first (source: https://myon.info/blog/2024/07/06/vivado-docker) else everythig crashes.
 4. Run
    ```
    python ctrl/make_scene_buffer.py <scene_file.json>
@@ -43,11 +37,7 @@ If you want to test this for yourself in hardware:
    to create `data/mat_dict.mem` and `data/scene_buffer.mem`, which are required for build (else you'll render a black screen). The canonical json we used for testing is `ctrl/scenes/canonical_balls.json.`
 5. Flash to the board with
    ```
-   # Genesys 2
-   openFPGALoader -b genesys2 obj_rtx/final.bit
-
-   # Nexys Video
-   # openFPGALoader -b nexysVideo obj_rtx/final.bit
+   openFPGALoader -b genesys2 obj/final.bit
    ```
 6. Hook up the board to a display via HDMI
 7. (Optional) Install cocotb and pyserial (and a few other things; I need to add a `requirements.txt` at some point) and flash new scenes with
@@ -60,13 +50,13 @@ If you want to test this for yourself in hardware:
    ```
    with the right port name.
 
-If you don't have the Nexys video, a comparable board will work provided it has enough logic slices, HDMI output, and sufficient DRAM. You will need to modify `xdc/top_level.xdc` with the right pinout labels. We based ours off of `https://github.com/Digilent/digilent-xdc/blob/master/Nexys-Video-Master.xdc` as well as somee file that Joe gave us.
+If you don't have the Genesys 2, a comparable board will work provided it has enough logic slices, HDMI output, and sufficient DRAM. You will need to modify `xdc/top_level.xdc` with the right pinout labels. e.g. for the Nexys Video, see `https://github.com/Digilent/digilent-xdc/blob/master/Nexys-Video-Master.xdc`.
 
 ## Migrating from Nexys Video to Genesys 2
 
-The working Genesys 2 port of the full raytracer (`hdl/top_level_rtx.sv`) required four main changes:
+Codex helped me migrate everything from the Nexys Video to the Genesys 2 board. Here's what it said about what needed to change:
 
-- Clocking (Genesys 2 SYSCLK is 200MHz differential):
+- Clocking:
   - Change `top_level` to take `sysclk_p/sysclk_n` instead of a single-ended `clk_100mhz`.
   - Add an MMCM-based divider (`hdl/clock/clkwiz.sv`) to derive a 100MHz internal clock for the rest of the design.
   - Update `xdc/top_level.xdc` to LOC `sysclk_p/n` and `create_clock` it at 200MHz (Genesys 2 SYSCLK pins are `AD12/AD11`).
@@ -81,27 +71,6 @@ The working Genesys 2 port of the full raytracer (`hdl/top_level_rtx.sv`) requir
 - DDR3 interface correctness (Genesys 2 MT41J256M16-class wiring):
   - Wire `ddr3_cs_n` and include `A[14]` (`ddr3_addr[14:0]`) through `top_level` and the framebuffer wrapper.
   - Configure the DDR3 top accordingly (`ROW_BITS=15`, `SDRAM_CAPACITY=4`, `ODELAY_SUPPORTED=1`, `BIST_MODE=0`).
-
-- Ring-oscillator RNG:
-  - Add `xdc/top_level_rtx_spec.xdc` with `ALLOW_COMBINATORIAL_LOOPS` for the ring-oscillator nets, and read it from `build_rtx.tcl`.
-
-Repro steps on Genesys 2 (once pins/clocks are correct):
-
-1. Generate the scene init files:
-   ```
-   python ctrl/make_scene_buffer.py ctrl/scenes/canonical_balls.json
-   ```
-   This generates `data/scene_buffer.mem` and `data/mat_dict.mem` which the RTL reads during synthesis/bitgen.
-2. Build the raytracer bitstream:
-   ```
-   mkdir -p obj_rtx
-   vivado -mode batch -source build_rtx.tcl -nojournal -log vivado_rtx.log
-   ```
-   (If running Vivado in Docker, the `LD_PRELOAD` workaround in the build section still applies.)
-3. Flash:
-   ```
-   openFPGALoader -b genesys2 obj_rtx/final.bit
-   ```
 
 ## Project structure
 
@@ -128,4 +97,5 @@ We anticipate getting cooked by LUT usage at some point, so here are some areas 
 
 We use 24-bit floating point here as a reasonable tradeoff between timing and precision, but if you want to tweak the floating point, here's how:
 
-1. Find `sim/utils.py` and change
+1. Find `sim/utils.py` and change the bit widths.
+2. Run `ctrl/find_constants.py` and copy the output block to `hdl/constants.sv`. This figures out magic constants for the inverse square root bit hack, among other things.

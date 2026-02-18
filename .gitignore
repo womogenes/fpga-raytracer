@@ -26,3 +26,6 @@ tight_setup_hold_pins.txt
 project_1
 project_2
 /*.png
+
+#vibe coding
+.cursor/
