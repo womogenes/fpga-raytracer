@@ -8,14 +8,10 @@ This repo contains the source code for [@womogenes](https://github.com/womogenes
 Here's a test scene we made in Blender than flashed to the FPGA (it took about 24 minutes to render fully):
 
 <center>
-<img src="https://cdn.discordapp.com/attachments/1312647913213530223/1448456347225161759/IMG_0024.jpg?ex=69808a58&is=697f38d8&hm=6d904f176e5d2dac2c951b2ab3fc70fa1ac6d7eff7e3b2383f53fd0495724930&">
+<img src="https://i.ibb.co/MkcVpLhx/fpga-knight.jpg">
 </center>
 
 The core design is in SystemVerilog, though we have build files and tooling specifically for the [Nexys Video](https://digilent.com/reference/programmable-logic/nexys-video/start) board, which contains the Artix-7 FPGA with 13 Mbits of on-chip BRAM and 512 MB of DDR3 DRAM.
-
-<center>
-<img src="https://cdn.discordapp.com/attachments/1312647913213530223/1448483570057220138/IMG_0025.jpg?ex=6980a3b2&is=697f5232&hm=ef170720a4ac38976904231dfea3e840b4dbf8eb9500a670d6230c226128dddd&" width="400">
-</center>
 
 For the first ~10 weeks we used the [Real Digital Urbana Board](https://www.realdigital.org/hardware/urbana) which had fewer LUTs. Build files exist in git history somewhere.
 
