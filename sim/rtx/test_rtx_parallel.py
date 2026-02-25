@@ -18,7 +18,7 @@ from argparse import ArgumentParser, BooleanOptionalAction
 
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import ClockCycles, RisingEdge
+from cocotb.triggers import ClockCycles
 from cocotb.runner import get_runner
 
 import numpy as np
@@ -41,10 +41,11 @@ parser = ArgumentParser()
 parser.add_argument("--chunks", type=int, default=None)
 parser.add_argument("--scale", type=float, default=0.5)
 parser.add_argument("--frames", type=int, default=1)
-parser.add_argument("--waves", action=BooleanOptionalAction)
+parser.add_argument("--waves", action=BooleanOptionalAction, default=False)
 parser.add_argument("--json", type=str, default=None)
 
 args = parser.parse_args()
+WAVES = args.waves
 
 if "TEST_WIDTH" in os.environ:
     WIDTH = int(os.environ["TEST_WIDTH"])
@@ -174,6 +175,7 @@ async def test_module(dut):
 
     n_pixels = pixel_end_idx - pixel_start_idx + 1
     pixel_values = np.zeros((n_pixels, 3))
+    total_chunk_cycles = 0
 
     for i in tqdm(range(N_FRAMES * n_pixels), ncols=120, desc=f"[chunk {chunk_idx:>3}/{NUM_CHUNKS_ACTUAL:<3}]"):
         pixel_idx = (i % n_pixels) + pixel_start_idx
@@ -186,8 +188,11 @@ async def test_module(dut):
         await ClockCycles(dut.clk, 1)
         dut.new_ray.value = 0
 
-        await RisingEdge(dut.ray_done)
-        # await ClockCycles(dut.clk, 1000)
+        pixel_cycles = 1
+        while not dut.ray_done.value.integer:
+            await ClockCycles(dut.clk, 1)
+            pixel_cycles += 1
+        total_chunk_cycles += pixel_cycles
 
         pixel_color = unpack_color8(dut.rtx_pixel.value.integer)
 
@@ -197,6 +202,17 @@ async def test_module(dut):
     # Save into common chunks directory
     save_path = CHUNKS_OUT_DIR / f"chunk_{chunk_idx:04}.npy"
     np.save(save_path, np.floor(pixel_values / N_FRAMES))
+    stats_path = CHUNKS_OUT_DIR / f"chunk_{chunk_idx:04}.json"
+    with open(stats_path, "w") as fout:
+        json.dump(
+            {
+                "chunk_idx": chunk_idx,
+                "cycles": total_chunk_cycles,
+                "pixel_samples": N_FRAMES * n_pixels,
+                "output_pixels": n_pixels,
+            },
+            fout,
+        )
     dut._log.info(f"Saved pixel chunk to {save_path}")
 
 
@@ -216,7 +232,7 @@ def build_verilator():
         build_args=BUILD_TEST_ARGS,
         parameters=PARAMETERS,
         timescale=("1ns", "1ps"),
-        waves=True,
+        waves=WAVES,
         build_dir=BUILD_DIR,
     )
 
@@ -248,7 +264,7 @@ def run_test_worker(pixel_start_idx: int, pixel_end_idx: int, chunk_idx: int):
         build_args=BUILD_TEST_ARGS,
         parameters=PARAMETERS,
         timescale=("1ns", "1ps"),
-        waves=True,
+        waves=WAVES,
         build_dir=BUILD_DIR,
     )
 
@@ -257,7 +273,7 @@ def run_test_worker(pixel_start_idx: int, pixel_end_idx: int, chunk_idx: int):
         hdl_toplevel=HDL_TOPLEVEL,
         test_module=test_file,
         test_args=[],
-        waves=True,
+        waves=WAVES,
     )
 
     return chunk_idx
@@ -296,16 +312,38 @@ if __name__ == "__main__":
     # Gather chunks and combine
     print("\nCombining chunks...")
     pixel_chunks = []
+    total_cycles = 0
+    total_pixel_samples = 0
+    total_output_pixels = 0
     for chunk_idx in range(len(CHUNK_RANGES)):
         chunk_path = CHUNKS_OUT_DIR / f"chunk_{chunk_idx:04}.npy"
+        stats_path = CHUNKS_OUT_DIR / f"chunk_{chunk_idx:04}.json"
         if not chunk_path.exists():
             raise FileNotFoundError(f"Expected chunk file missing: {chunk_path}")
+        if not stats_path.exists():
+            raise FileNotFoundError(f"Expected chunk stats missing: {stats_path}")
         pixel_chunks.append(np.load(chunk_path))
+        with open(stats_path) as fin:
+            chunk_stats = json.load(fin)
+        total_cycles += chunk_stats["cycles"]
+        total_pixel_samples += chunk_stats["pixel_samples"]
+        total_output_pixels += chunk_stats["output_pixels"]
 
     pixels_all = np.concatenate(pixel_chunks)
     img = Image.fromarray(pixels_all.reshape((HEIGHT, WIDTH, 3)).astype("uint8"))
     output_file = f"test_rtx_{WIDTH}x{HEIGHT}_f{N_FRAMES}.png"
     img.save(output_file)
+    metrics = {
+        "frames": N_FRAMES,
+        "total_cycles": total_cycles,
+        "pixel_samples": total_pixel_samples,
+        "output_pixels": total_output_pixels,
+        "cycles_per_pixel_per_frame": total_cycles / total_pixel_samples,
+        "cycles_per_output_pixel_all_frames": total_cycles / total_output_pixels,
+    }
+    metrics_path = Path(output_file).with_suffix(".metrics.json")
+    with open(metrics_path, "w") as fout:
+        json.dump(metrics, fout, indent=2)
 
     total_time = time.time() - build_start
     print(f"\n=== Render complete ===")
@@ -313,3 +351,6 @@ if __name__ == "__main__":
     print(f"Build time: {build_time:.1f}s")
     print(f"Render time: {render_time:.1f}s ({render_time/60:.1f} min)")
     print(f"Total time: {total_time:.1f}s ({total_time/60:.1f} min)")
+    print(f"Total cycles: {total_cycles}")
+    print(f"Cycles per pixel per frame: {metrics['cycles_per_pixel_per_frame']:.3f}")
+    print(f"Cycles per output pixel across all frames: {metrics['cycles_per_output_pixel_all_frames']:.3f}")

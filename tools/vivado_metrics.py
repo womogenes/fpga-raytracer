@@ -26,17 +26,15 @@ class VivadoMetrics:
     vivado_log: str
 
 
-def _repo_paths() -> tuple[Path, Path, Path]:
-    script_path = Path(__file__).resolve()
-    project_dir = script_path.parent
-    repo_root = project_dir.parent
+def _repo_paths() -> tuple[Path, Path]:
+    repo_root = Path(__file__).resolve().parents[1]
     code_root = Path.home() / "code"
     try:
         repo_suffix = repo_root.relative_to(code_root)
     except ValueError as exc:
         raise RuntimeError(f"{repo_root} is not under {code_root}") from exc
-    container_project_dir = Path("/root/code") / repo_suffix / project_dir.name
-    return project_dir, repo_root, container_project_dir
+    container_project_dir = Path("/root/code") / repo_suffix
+    return repo_root, container_project_dir
 
 
 def _run(cmd: list[str], *, cwd: Path | None = None) -> None:
@@ -88,8 +86,8 @@ def _parse_log_fallback(log_path: Path) -> tuple[int, float, float]:
 
 
 def compute_vivado_metrics() -> VivadoMetrics:
-    project_dir, _, container_project_dir = _repo_paths()
-    output_dir = project_dir / "obj_rtx"
+    repo_root, container_project_dir = _repo_paths()
+    output_dir = repo_root / "obj_rtx"
     output_dir.mkdir(exist_ok=True)
 
     post_route_util = output_dir / "post_route_util.rpt"
