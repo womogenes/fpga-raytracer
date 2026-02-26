@@ -45,6 +45,7 @@ def runner():
     hdl_toplevel_lang = os.getenv("HDL_TOPLEVEL_LANG", "verilog")
     sim = os.getenv("SIM", "icarus")
     proj_path = Path(__file__).resolve().parent.parent.parent
+    sys.path.insert(0, str(proj_path))
     sys.path.append(str(proj_path / "sim" / "model"))
     sources = [
         proj_path / "hdl" / "pipeline.sv",
@@ -57,6 +58,7 @@ def runner():
         proj_path / "hdl" / "math" / "fp_inv_sqrt.sv",
         proj_path / "hdl" / "math" / "fp_vec3_ops.sv",
         proj_path / "hdl" / "math" / "fp_convert.sv",
+        proj_path / "hdl" / "rng" / "prng8.sv",
         proj_path / "hdl" / "rtx" / "ray_signal_gen.sv",
         proj_path / "hdl" / "rtx" / "ray_maker.sv",
         proj_path / "hdl" / "rtx" / "ray_caster.sv",
@@ -66,8 +68,8 @@ def runner():
     # values for parameters defined earlier in the code.
     parameters = {"WIDTH": 10, "HEIGHT": 10}
 
-    sys.path.append(str(proj_path / "sim"))
     hdl_toplevel = "ray_caster"
+    test_module = ".".join(Path(__file__).resolve().with_suffix("").relative_to(proj_path).parts)
     
     runner = get_runner(sim)
     runner.build(
@@ -83,7 +85,7 @@ def runner():
     run_test_args = []
     runner.test(
         hdl_toplevel=hdl_toplevel,
-        test_module=test_file,
+        test_module=test_module,
         test_args=run_test_args,
         waves=True,
     )

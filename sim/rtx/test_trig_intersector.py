@@ -3,6 +3,7 @@ import sys
 
 from pathlib import Path
 
+import matplotlib
 import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import Timer, ClockCycles, RisingEdge, FallingEdge, ReadOnly
@@ -12,6 +13,8 @@ from enum import Enum
 import random
 import ctypes
 import numpy as np
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from PIL import Image
@@ -99,10 +102,11 @@ async def test_module(dut):
         x_data, y_data, z_data = zip(*points)
 
         ax.scatter(x_data, y_data, z_data, s=2, alpha=1, color="blue")
-    x_data, y_data, z_data = zip(*missedpoints)
-
-    ax.scatter(x_data, y_data, z_data, s=2, alpha=1, color="red")
-    plt.show()
+    if len(missedpoints) > 0:
+        x_data, y_data, z_data = zip(*missedpoints)
+        ax.scatter(x_data, y_data, z_data, s=2, alpha=1, color="red")
+    assert len(points) > 0, "expected at least one triangle hit"
+    plt.close(fig)
 
 
 def runner():
@@ -111,6 +115,7 @@ def runner():
     hdl_toplevel_lang = os.getenv("HDL_TOPLEVEL_LANG", "verilog")
     sim = os.getenv("SIM", "icarus")
     proj_path = Path(__file__).resolve().parent.parent.parent
+    sys.path.insert(0, str(proj_path))
     sys.path.append(str(proj_path / "sim" / "model"))
     sources = [
         proj_path / "hdl" / "pipeline.sv",
@@ -131,7 +136,6 @@ def runner():
     # values for parameters defined earlier in the code.
     parameters = {}
 
-    sys.path.append(str(proj_path / "sim"))
     hdl_toplevel = "trig_intersector"
     
     runner = get_runner(sim)
@@ -146,9 +150,10 @@ def runner():
         build_dir=(proj_path / "sim" / "sim_build")
     )
     run_test_args = []
+    test_module = ".".join(Path(__file__).resolve().with_suffix("").relative_to(proj_path).parts)
     runner.test(
         hdl_toplevel=hdl_toplevel,
-        test_module=test_file,
+        test_module=test_module,
         test_args=run_test_args,
         waves=True,
     )

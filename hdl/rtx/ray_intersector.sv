@@ -217,21 +217,33 @@ module ray_intersector (
     .hit_norm(trig_intx_hit_norm_prepipe)
   );
 
-  pipeline #(
-    .WIDTH(1 + $bits(fp_vec3) + $bits(fp_vec3) + $bits(fp)), 
-    .DEPTH(SPHERE_INTX_DELAY - TRIG_INTX_DELAY)) trig_inx_pipe (
-      .clk(clk),
-      .in({
-        trig_intx_hit_prepipe,
-        trig_intx_hit_pos_prepipe,
-        trig_intx_hit_dist_prepipe,
-        trig_intx_hit_norm_prepipe}),
-      .out({
-        trig_intx_hit,
-        trig_intx_hit_pos,
-        trig_intx_hit_dist,
-        trig_intx_hit_norm})
-    );
+  generate
+    if (SPHERE_INTX_DELAY > TRIG_INTX_DELAY) begin : gen_trig_pipe
+      pipeline #(
+        .WIDTH(1 + $bits(fp_vec3) + $bits(fp_vec3) + $bits(fp)),
+        .DEPTH(SPHERE_INTX_DELAY - TRIG_INTX_DELAY)
+      ) trig_inx_pipe (
+        .clk(clk),
+        .in({
+          trig_intx_hit_prepipe,
+          trig_intx_hit_pos_prepipe,
+          trig_intx_hit_dist_prepipe,
+          trig_intx_hit_norm_prepipe
+        }),
+        .out({
+          trig_intx_hit,
+          trig_intx_hit_pos,
+          trig_intx_hit_dist,
+          trig_intx_hit_norm
+        })
+      );
+    end else begin : gen_trig_bypass
+      assign trig_intx_hit = trig_intx_hit_prepipe;
+      assign trig_intx_hit_pos = trig_intx_hit_pos_prepipe;
+      assign trig_intx_hit_dist = trig_intx_hit_dist_prepipe;
+      assign trig_intx_hit_norm = trig_intx_hit_norm_prepipe;
+    end
+  endgenerate
 
 endmodule
 
