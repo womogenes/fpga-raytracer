@@ -1,108 +1,72 @@
-
-#set limits (don't change unless you're running local):
-#if running remote, increasing threads will potentially cause your code to submission to get bounced
-#due to a process watchdog.
 set_param general.maxThreads 16
-#Define target part and create output directory
 
-# The ??? uses this chip:
-# ??? refers to the fact that it is a ???
-# ??? refers to its package it is in
-# ??? to the "speed grade" of the chip
-
-# set partNum xc7a200t-fbg484-1
 set partNum xc7k325t-ffg900-2
-set outputDir obj
+set dutVariant [lindex $argv 0]
+if {$dutVariant eq ""} {
+    set dutVariant "fp_add"
+}
+
+if {$dutVariant eq "fp_add"} {
+    set dutDefine ""
+} elseif {$dutVariant eq "fp_add_one_cycle_baseline"} {
+    set dutDefine "FP_ADD_ONE_CYCLE_BASELINE"
+} elseif {$dutVariant eq "fp_add_one_cycle_opt"} {
+    set dutDefine "FP_ADD_ONE_CYCLE_OPT"
+} else {
+    error "Unsupported DUT variant: $dutVariant"
+}
+
+set outputDir [file join obj_test $dutVariant]
 file mkdir $outputDir
-set files [glob -nocomplain "$outputDir/*"]
-# if {[llength $files] != 0} {
-#     # clear folder contents
-#     puts "deleting contents of $outputDir"
-#     file delete -force {*}[glob -directory $outputDir *];
-# } else {
-#     puts "$outputDir is empty"
-# }
 
-# read in all system verilog files:
-set sources_sv [ concat \
-    [ glob ./hdl/constants.sv ] \
-    [ glob ./hdl/pipeline.sv ] \
-    [ glob ./hdl/clock/*.sv ] \
-    [ glob ./hdl/hdmi/*.sv ] \
-    [ glob ./hdl/types/*.sv ] \
-    [ glob ./hdl/math/*.sv ] \
-    [ glob ./hdl/rng/*.sv ] \
-    [ glob ./hdl/rtx/*.sv ] \
-    [ glob ./hdl/dram/*.sv ] \
-    [ glob ./hdl/uart/*.sv ] \
-    [ glob ./hdl/mem/*.sv ] \
-    [ glob ./hdl/seven_seg/*.sv ] \
-    [ glob ./hdl/top_level_test.sv ] \
+set sources_sv [concat \
+    [glob ./hdl/constants.sv] \
+    [glob ./hdl/types/*.sv] \
+    [glob ./hdl/pipeline.sv] \
+    [glob ./hdl/clock/*.sv] \
+    [glob ./hdl/math/clz.sv] \
+    [glob ./hdl/math/fp_add.sv] \
+    [glob ./hdl/tb/fp_add/*.sv] \
+    [glob ./hdl/top_level_test.sv] \
 ]
-read_verilog -sv $sources_sv
 
-# read in all (if any) verilog files:
-set sources_v [ concat \
-    [ glob -nocomplain ./hdl/hdmi/*.v ] \
-    [ glob -nocomplain ./hdl/dram/*.v ] \
-    [ glob -nocomplain ./hdl/mem/*.v ] \
+if {$dutDefine eq ""} {
+    read_verilog -sv $sources_sv
+} else {
+    read_verilog -sv -define $dutDefine $sources_sv
+}
+
+set sources_v [concat \
+    [glob -nocomplain ./hdl/hdmi/*.v] \
 ]
-if {[llength $sources_v] > 0 } {
+if {[llength $sources_v] > 0} {
     read_verilog $sources_v
 }
 
-# read in constraint files:
-read_xdc ./xdc/top_level.xdc
-
-# read in all (if any) hex memory files:
-set sources_mem [ glob -nocomplain ./data/*.mem ]
-if {[llength $sources_mem] > 0} {
-    read_mem $sources_mem
-}
-
-# set the part number so Vivado knows how to build (each FPGA is different)
+read_xdc ./xdc/top_level_test.xdc
 set_part $partNum
 
-# Read in and synthesize all IP (first used in week 04!)
-set sources_ip [ glob -nocomplain -directory ./ip -tails * ]
-puts $sources_ip
-foreach ip_source $sources_ip {
-    if {[file isdirectory ./ip/$ip_source]} {
-	read_ip ./ip/$ip_source/$ip_source.xci
-    }
-}
-generate_target all [get_ips]
-synth_ip [get_ips]
-
-#Run Synthesis
 synth_design -top top_level -part $partNum -verbose
-#write_checkpoint -force $outputDir/post_synth.dcp
 report_timing_summary -file $outputDir/post_synth_timing_summary.rpt
-report_utilization -file $outputDir/post_synth_util.rpt -hierarchical -hierarchical_depth 16
+report_utilization -file $outputDir/post_synth_util.rpt -hierarchical -hierarchical_depth 8
 report_timing -file $outputDir/post_synth_timing.rpt
 
-#run optimization
 opt_design
 place_design
 report_clock_utilization -file $outputDir/clock_util.rpt
-
-#get timing violations and run optimizations if needed
 if {[get_property SLACK [get_timing_paths -max_paths 1 -nworst 1 -setup]] < 0} {
- puts "Found setup timing violations => running physical optimization"
- phys_opt_design
+    puts "Found setup timing violations => running physical optimization"
+    phys_opt_design
 }
-#write_checkpoint -force $outputDir/post_place.dcp
+
 report_utilization -file $outputDir/post_place_util.rpt
 report_timing_summary -file $outputDir/post_place_timing_summary.rpt
 report_timing -file $outputDir/post_place_timing.rpt
-#Route design and generate bitstream
+
 route_design -directive Explore
-#write_checkpoint -force $outputDir/post_route.dcp
 report_route_status -file $outputDir/post_route_status.rpt
+report_utilization -file $outputDir/post_route_util.rpt
 report_timing_summary -file $outputDir/post_route_timing_summary.rpt
 report_timing -file $outputDir/post_route_timing.rpt
 report_power -file $outputDir/post_route_power.rpt
 report_drc -file $outputDir/post_imp_drc.rpt
-#set_property SEVERITY {Warning} [get_drc_checks NSTD-1]
-#write_verilog -force $outputDir/cpu_impl_netlist.v -mode timesim -sdf_anno true
-write_bitstream -force $outputDir/final.bit

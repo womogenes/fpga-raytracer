@@ -11,7 +11,10 @@ from pathlib import Path
 
 VIVADO_COMPOSE_DIR = Path.home() / "code" / "vivado"
 CONTAINER_NAME = "vivado"
-CONTAINER_VIVADO = "/tools/Xilinx/2025.1/Vivado/bin/vivado"
+CONTAINER_VIVADO_CANDIDATES = (
+    "/tools/Xilinx/2025.1/Vivado/bin/vivado",
+    "/opt/Xilinx/2025.1/Vivado/bin/vivado",
+)
 LD_PRELOAD = "/lib/x86_64-linux-gnu/libudev.so.1"
 
 
@@ -39,6 +42,25 @@ def _repo_paths() -> tuple[Path, Path]:
 
 def _run(cmd: list[str], *, cwd: Path | None = None) -> None:
     subprocess.run(cmd, cwd=cwd, check=True)
+
+
+def _find_container_vivado() -> str:
+    for candidate in CONTAINER_VIVADO_CANDIDATES:
+        probe = subprocess.run(
+            [
+                "docker",
+                "exec",
+                CONTAINER_NAME,
+                "bash",
+                "-lc",
+                f"test -x {candidate}",
+            ],
+            check=False,
+        )
+        if probe.returncode == 0:
+            return candidate
+    checked = ", ".join(CONTAINER_VIVADO_CANDIDATES)
+    raise RuntimeError(f"Could not find Vivado in container {CONTAINER_NAME}; checked {checked}")
 
 
 def _parse_post_route_util(path: Path) -> int:
@@ -99,11 +121,12 @@ def compute_vivado_metrics() -> VivadoMetrics:
             stale_path.unlink()
 
     _run(["docker", "compose", "up", "-d"], cwd=VIVADO_COMPOSE_DIR)
+    container_vivado = _find_container_vivado()
 
     batch_cmd = (
         f"cd {container_project_dir} && "
         f"export LD_PRELOAD={LD_PRELOAD} && "
-        f"{CONTAINER_VIVADO} -mode batch -source build_rtx.tcl -nojournal -log obj_rtx/vivado.log"
+        f"{container_vivado} -mode batch -source build_rtx.tcl -nojournal -log obj_rtx/vivado.log"
     )
     _run(["docker", "exec", CONTAINER_NAME, "bash", "-lc", batch_cmd])
 
