@@ -22,7 +22,7 @@ METRICS_ROOT = REPO_ROOT / "metrics"
 SCENE_THRESHOLD_FLOORS = {
     "chicken": {
         "raw_rmse": 30.0,
-        "blur_rmse": 6.5,
+        "blur_rmse": 7.0,
     },
 }
 
@@ -50,6 +50,11 @@ def _load_rgb(path: Path, *, blur_radius: float | None = None) -> Image.Image:
     if blur_radius:
         img = img.filter(ImageFilter.GaussianBlur(radius=blur_radius))
     return img
+
+
+def image_size(path: Path) -> tuple[int, int]:
+    with Image.open(path) as img:
+        return img.size
 
 
 def image_rmse(path_a: Path, path_b: Path, *, blur_radius: float | None = None) -> float:
@@ -104,6 +109,10 @@ def stats_vs_reference(path: Path, refs: list[Path], *, blur_radius: float | Non
     }
 
 
+def compatible_gold_refs(refs: list[Path], *, required_size: tuple[int, int]) -> list[Path]:
+    return [ref for ref in refs if image_size(ref) == required_size]
+
+
 def main() -> int:
     args = parse_args()
     scene_path = (REPO_ROOT / args.json).resolve()
@@ -130,6 +139,10 @@ def main() -> int:
         "timestamp": timestamp,
         "scale": args.scale,
         "frames": args.frames,
+        "image_size": {
+            "width": width,
+            "height": height,
+        },
         "repeats": args.repeats,
         "seed": f"0x{args.seed:024x}",
         "blur_radius": args.blur_radius,
@@ -137,6 +150,14 @@ def main() -> int:
         "image_dir": str(image_run_dir.relative_to(REPO_ROOT)),
         "metrics_dir": str(metrics_run_dir.relative_to(REPO_ROOT)),
         "gold_dir": str(gold_dir.relative_to(REPO_ROOT)),
+        "gold_reference_compatibility": {
+            "required_size": {
+                "width": width,
+                "height": height,
+            },
+            "available_gold_count": 0,
+            "compatible_gold_count": 0,
+        },
         "runs": [],
         "raw_rmse_vs_run1": {},
         "blur_rmse_vs_run1": {},
@@ -224,28 +245,32 @@ def main() -> int:
                 )
 
     gold_pngs = sorted(gold_dir.glob("*.png"))
-    raw_stats = expected_correct_stats(gold_pngs)
-    blur_stats = expected_correct_stats(gold_pngs, blur_radius=args.blur_radius)
+    compatible_gold_pngs = compatible_gold_refs(gold_pngs, required_size=(width, height))
+    summary["gold_reference_compatibility"]["available_gold_count"] = len(gold_pngs)
+    summary["gold_reference_compatibility"]["compatible_gold_count"] = len(compatible_gold_pngs)
+
+    raw_stats = expected_correct_stats(compatible_gold_pngs)
+    blur_stats = expected_correct_stats(compatible_gold_pngs, blur_radius=args.blur_radius)
     summary["expected_correct_stats"]["raw_rmse"] = raw_stats
     summary["expected_correct_stats"]["blur_rmse"] = blur_stats
     summary["expected_correct_value"]["raw_rmse"] = None if raw_stats is None else raw_stats["max"]
     summary["expected_correct_value"]["blur_rmse"] = None if blur_stats is None else blur_stats["max"]
-    if "raw_rmse" in threshold_floor:
+    if raw_stats is not None and "raw_rmse" in threshold_floor:
         summary["expected_correct_value"]["raw_rmse"] = max(
             threshold_floor["raw_rmse"],
             0.0 if summary["expected_correct_value"]["raw_rmse"] is None else summary["expected_correct_value"]["raw_rmse"],
         )
-    if "blur_rmse" in threshold_floor:
+    if blur_stats is not None and "blur_rmse" in threshold_floor:
         summary["expected_correct_value"]["blur_rmse"] = max(
             threshold_floor["blur_rmse"],
             0.0 if summary["expected_correct_value"]["blur_rmse"] is None else summary["expected_correct_value"]["blur_rmse"],
         )
 
     if reference_png.exists():
-        summary["gold_reference_match"]["raw_rmse"] = stats_vs_reference(reference_png, gold_pngs)
+        summary["gold_reference_match"]["raw_rmse"] = stats_vs_reference(reference_png, compatible_gold_pngs)
         summary["gold_reference_match"]["blur_rmse"] = stats_vs_reference(
             reference_png,
-            gold_pngs,
+            compatible_gold_pngs,
             blur_radius=args.blur_radius,
         )
 

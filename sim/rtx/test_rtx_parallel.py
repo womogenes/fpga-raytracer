@@ -35,7 +35,6 @@ sys.path.append(str(Path(__file__).resolve().parent.parent.parent / "ctrl"))
 from utils import make_fp_vec3, pack_bits, FP_BITS, FP_VEC3_BITS
 from make_scene_buffer import export_scene
 
-# MULTIPROCESSING GO BRRR
 from multiprocessing import Pool
 
 parser = ArgumentParser()
@@ -66,7 +65,6 @@ else:
     N_FRAMES = args.frames
     BASE_SEED = args.seed
 
-    # Parent caller, initialize scene params
     if args.json:
         export_scene(args.json)
         with open(args.json) as fin:
@@ -189,7 +187,6 @@ async def test_module(dut):
             ((color8 >> 11) & 0b11111) << 3
         )
 
-    # Extract pixel_start_idx and pixel_end_idx from environment vars
     pixel_start_idx = int(os.environ["PIXEL_START_IDX"])
     pixel_end_idx = int(os.environ["PIXEL_END_IDX"])
     n_pixels = pixel_end_idx - pixel_start_idx + 1
@@ -288,7 +285,6 @@ def run_test_worker(pixel_start_idx: int, pixel_end_idx: int, chunk_idx: int):
         build_dir=BUILD_DIR,
     )
 
-    # Now run test
     runner.test(
         hdl_toplevel=HDL_TOPLEVEL,
         test_module=test_file,
@@ -327,7 +323,7 @@ if __name__ == "__main__":
     print("Starting parallel render...")
     render_start = time.time()
     with Pool(processes=CPU_COUNT) as pool:
-        results = pool.map(worker, tasks)
+        pool.map(worker, tasks)
     render_time = time.time() - render_start
 
     # Gather chunks and combine

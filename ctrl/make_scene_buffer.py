@@ -58,16 +58,9 @@ class Object:
         self.mat_idx = mat_idx
         self.trig = trig or ((0, 0, 0),) * 3
 
-        # Geometry:
-        # - Spheres use `sphere_center`/`sphere_rad`.
-        # - Trig/parallelogram/plane objects use `trig` in the hardware format:
-        #     [v0, v0v1, v0v2]
-        #   i.e. origin point plus two edge vectors (NOT three absolute vertices).
         if self.obj_type == 0:
             self.trig_norm = (0.0, 0.0, 0.0)
         elif trig_norm is not None:
-            # Some hand-authored scenes already include normals; trust them (but ensure
-            # we store a finite unit-ish vector).
             n = np.asarray(trig_norm, dtype=float)
             n_norm = float(np.linalg.norm(n))
             if (not np.isfinite(n_norm)) or n_norm < 1e-12:
@@ -81,9 +74,6 @@ class Object:
             v0v2 = tri[2]
             n = np.cross(v0v1, v0v2).astype(float)
             n_norm = float(np.linalg.norm(n))
-
-            # If the triangle is degenerate (or contains NaNs), keep a zero normal so
-            # packing doesn't crash; the hardware will effectively treat it as invalid.
             if (not np.isfinite(n_norm)) or n_norm < 1e-12:
                 self.trig_norm = (0.0, 0.0, 0.0)
             else:

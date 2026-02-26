@@ -1,3 +1,4 @@
+import math
 import os
 import sys
 from pathlib import Path
@@ -5,48 +6,49 @@ from pathlib import Path
 import cocotb
 from cocotb.clock import Clock
 from cocotb.runner import get_runner
-from cocotb.triggers import ClockCycles, ReadOnly, RisingEdge, with_timeout
+from cocotb.triggers import ClockCycles, RisingEdge
 
-import numpy as np
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from utils import convert_fp, convert_fp_vec3, make_fp_vec3
 
-proj_path = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(proj_path))
-sys.path.append(str(proj_path / "sim"))
-sys.path.append(str(proj_path / "ctrl"))
-
-from utils import convert_fp_vec3, make_fp_vec3
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "ctrl"))
 from make_scene_buffer import Object
 
-
-LEFT_MAT_IDX = 7
-RIGHT_MAT_IDX = 13
-TEST_OBJECTS = [
-    Object(mat_idx=LEFT_MAT_IDX, sphere_center=(-1.0, 4.0, 0.0), sphere_rad=1.0, obj_type=0),
-    Object(mat_idx=RIGHT_MAT_IDX, sphere_center=(1.0, 4.0, 0.0), sphere_rad=1.0, obj_type=0),
-]
+SPHERE_DELAY = 20
+RAY_INTERSECTOR_OVERHEAD = 1
 
 
-def normalize(vec):
-    arr = np.asarray(vec, dtype=float)
-    return tuple(arr / np.linalg.norm(arr))
+def scalar_close(actual: float, expected: float, *, tol: float = 0.05) -> None:
+    abs_err = abs(actual - expected)
+    rel_err = 0.0 if expected == 0 else abs_err / abs(expected)
+    assert abs_err <= tol or rel_err <= 0.03, (
+        f"expected={expected} actual={actual} abs_err={abs_err} rel_err={rel_err}"
+    )
 
 
-async def stream_scene(dut):
-    dut.num_objs.value = len(TEST_OBJECTS)
+async def scene_buffer_driver(dut, objs: list[Object]) -> None:
     while True:
-        for obj in TEST_OBJECTS:
+        for obj in objs:
             dut.obj.value = obj.pack_bits()[0]
-            await ClockCycles(dut.clk, 1)
+            await RisingEdge(dut.clk)
 
 
-async def launch_ray(dut, direction):
-    dut.ray_origin.value = make_fp_vec3((0.0, 0.0, 0.0))
-    dut.ray_dir.value = make_fp_vec3(direction)
+async def launch_ray(
+    dut,
+    ray_origin: tuple[float, float, float],
+    ray_dir: tuple[float, float, float],
+) -> int:
+    dut.ray_origin.value = make_fp_vec3(ray_origin)
+    dut.ray_dir.value = make_fp_vec3(ray_dir)
     dut.ray_valid.value = 1
-    await ClockCycles(dut.clk, 1)
+    await RisingEdge(dut.clk)
     dut.ray_valid.value = 0
-    await with_timeout(RisingEdge(dut.hit_valid), 2000, "ns")
-    await ReadOnly()
+    cycles = 1
+    while True:
+        await RisingEdge(dut.clk)
+        cycles += 1
+        if dut.hit_valid.value.integer:
+            return cycles
 
 
 @cocotb.test()
@@ -55,70 +57,107 @@ async def test_module(dut):
 
     dut.rst.value = 1
     dut.ray_valid.value = 0
-    dut.ray_origin.value = 0
-    dut.ray_dir.value = 0
     dut.obj.value = 0
     dut.num_objs.value = 0
-    await ClockCycles(dut.clk, 5)
+    await ClockCycles(dut.clk, 3)
     dut.rst.value = 0
+
+    sphere_scene = [
+        Object(mat_idx=7, sphere_center=(0.0, 4.0, 0.0), sphere_rad=1.0, obj_type=0),
+    ]
+    dut.num_objs.value = len(sphere_scene)
+    sphere_task = cocotb.start_soon(scene_buffer_driver(dut, sphere_scene))
     await ClockCycles(dut.clk, 3)
+    cycles = await launch_ray(dut, (0.0, 0.0, 0.0), (0.0, 1.0, 0.0))
+    assert cycles == SPHERE_DELAY + len(sphere_scene) + RAY_INTERSECTOR_OVERHEAD, (
+        f"unexpected sphere latency: {cycles}"
+    )
+    assert dut.hit_any.value.integer == 1
+    assert dut.hit_mat_idx.value.integer == 7
+    scalar_close(convert_fp(dut.hit_dist.value.integer), 3.0)
+    sphere_task.kill()
 
-    cocotb.start_soon(stream_scene(dut))
+    triangle = Object(
+        mat_idx=11,
+        obj_type=1,
+        trig=((-1.0, 5.0, -1.0), (2.0, 0.0, 0.0), (0.0, 0.0, 2.0)),
+        trig_norm=(0.0, -1.0, 0.0),
+    )
+    miss_sphere = Object(mat_idx=9, sphere_center=(3.0, 4.0, 0.0), sphere_rad=0.5, obj_type=0)
+    mixed_scene = [miss_sphere, triangle]
+    dut.num_objs.value = len(mixed_scene)
+    mixed_task = cocotb.start_soon(scene_buffer_driver(dut, mixed_scene))
     await ClockCycles(dut.clk, 3)
-
-    await launch_ray(dut, normalize((-1.0, 4.0, 0.0)))
+    cycles = await launch_ray(dut, (0.0, 0.0, 0.0), (0.0, 1.0, 0.0))
+    assert cycles == SPHERE_DELAY + len(mixed_scene) + RAY_INTERSECTOR_OVERHEAD, (
+        f"unexpected mixed latency: {cycles}"
+    )
     assert dut.hit_any.value.integer == 1
-    assert dut.hit_mat_idx.value.integer == LEFT_MAT_IDX
-    left_hit = convert_fp_vec3(dut.hit_pos.value)
-    assert left_hit[0] < 0.0
+    assert dut.hit_mat_idx.value.integer == 11
+    scalar_close(convert_fp(dut.hit_dist.value.integer), 5.0, tol=0.08)
+    mixed_task.kill()
 
-    await ClockCycles(dut.clk, 2)
-
-    await launch_ray(dut, normalize((1.0, 4.0, 0.0)))
+    reordered_scene = [triangle, miss_sphere]
+    dut.num_objs.value = len(reordered_scene)
+    reordered_task = cocotb.start_soon(scene_buffer_driver(dut, reordered_scene))
+    await ClockCycles(dut.clk, 3)
+    cycles = await launch_ray(dut, (0.0, 0.0, 0.0), (0.0, 1.0, 0.0))
+    assert cycles == SPHERE_DELAY + len(reordered_scene) + RAY_INTERSECTOR_OVERHEAD, (
+        f"unexpected reordered latency: {cycles}"
+    )
     assert dut.hit_any.value.integer == 1
-    assert dut.hit_mat_idx.value.integer == RIGHT_MAT_IDX
-    right_hit = convert_fp_vec3(dut.hit_pos.value)
-    assert right_hit[0] > 0.0
-
-    await ClockCycles(dut.clk, 2)
-
-    await launch_ray(dut, normalize((0.0, 0.0, 1.0)))
-    assert dut.hit_any.value.integer == 0
+    assert dut.hit_mat_idx.value.integer == 11
+    scalar_close(convert_fp(dut.hit_dist.value.integer), 5.0, tol=0.08)
+    hit_pos = convert_fp_vec3(dut.hit_pos.value.integer)
+    assert math.isfinite(hit_pos[0]) and math.isfinite(hit_pos[1]) and math.isfinite(hit_pos[2])
+    reordered_task.kill()
 
 
 def runner():
     sim = os.getenv("SIM", "icarus")
-    build_dir = proj_path / "sim" / "sim_build" / "ray_intersector"
+    proj_path = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(proj_path))
+    sys.path.append(str(proj_path / "sim" / "model"))
     sources = [
         proj_path / "hdl" / "pipeline.sv",
         proj_path / "hdl" / "constants.sv",
         proj_path / "hdl" / "types" / "types.sv",
-        *sorted((proj_path / "hdl" / "math").glob("*.sv")),
+        proj_path / "hdl" / "math" / "clz.sv",
+        proj_path / "hdl" / "math" / "fp_shift.sv",
+        proj_path / "hdl" / "math" / "fp_add.sv",
+        proj_path / "hdl" / "math" / "fp_add_fast.sv",
+        proj_path / "hdl" / "math" / "fp_mul.sv",
+        proj_path / "hdl" / "math" / "fp_inv_sqrt.sv",
+        proj_path / "hdl" / "math" / "fp_inv_sqrt_fast.sv",
+        proj_path / "hdl" / "math" / "fp_inv.sv",
+        proj_path / "hdl" / "math" / "fp_sqrt.sv",
+        proj_path / "hdl" / "math" / "fp_sqrt_fast.sv",
+        proj_path / "hdl" / "math" / "fp_vec3_ops.sv",
+        proj_path / "hdl" / "math" / "fp_vec3_add_fast.sv",
+        proj_path / "hdl" / "math" / "fp_vec3_dot_fast.sv",
+        proj_path / "hdl" / "math" / "quadratic_solver.sv",
+        proj_path / "hdl" / "math" / "quadratic_solver_fast.sv",
+        proj_path / "hdl" / "math" / "sphere_intersector.sv",
+        proj_path / "hdl" / "math" / "trig_intersector.sv",
         proj_path / "hdl" / "rtx" / "ray_intersector.sv",
     ]
-    build_test_args = [
-        "-Wno-WIDTHEXPAND",
-        "-Wno-MULTIDRIVEN",
-        "-Wno-WIDTHTRUNC",
-        "-Wno-TIMESCALEMOD",
-        "-Wno-PINMISSING",
-        "-Wno-BLKSEQ",
-    ]
+    hdl_toplevel = "ray_intersector"
+    test_module = ".".join(Path(__file__).resolve().with_suffix("").relative_to(proj_path).parts)
 
     runner = get_runner(sim)
     runner.build(
         sources=sources,
-        hdl_toplevel="ray_intersector",
+        hdl_toplevel=hdl_toplevel,
         always=True,
-        build_args=build_test_args,
+        build_args=["-Wall"],
         parameters={},
         timescale=("1ns", "1ps"),
         waves=True,
-        build_dir=build_dir,
+        build_dir=(proj_path / "sim" / "sim_build"),
     )
     runner.test(
-        hdl_toplevel="ray_intersector",
-        test_module=".".join(Path(__file__).resolve().with_suffix("").relative_to(proj_path).parts),
+        hdl_toplevel=hdl_toplevel,
+        test_module=test_module,
         test_args=[],
         waves=True,
     )
