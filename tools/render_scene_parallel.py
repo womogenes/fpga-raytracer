@@ -86,7 +86,6 @@ def main() -> int:
     image_run_dir.mkdir(parents=True, exist_ok=False)
     metrics_run_dir.mkdir(parents=True, exist_ok=False)
     gold_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(scene_path, metrics_run_dir / scene_path.name)
 
     width = int(32 * args.scale)
     height = int(18 * args.scale)
