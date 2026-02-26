@@ -17,3 +17,7 @@ Use the rendered PNGs to compare against `images/<scene>/_gold/`. The render too
 # Efficiency metrics
 
 Use the render metrics JSON to read `total_cycles` and `cycles_per_pixel_per_frame`. Use the Vivado tool for implementation metrics and the render metrics for runtime cost.
+
+## Notes
+
+When writing docs, only ever use sentence case for headers.
