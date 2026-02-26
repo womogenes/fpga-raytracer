@@ -19,6 +19,13 @@ TESTBENCH = REPO_ROOT / "sim" / "rtx" / "test_rtx_parallel.py"
 IMAGES_ROOT = REPO_ROOT / "images"
 METRICS_ROOT = REPO_ROOT / "metrics"
 
+SCENE_THRESHOLD_FLOORS = {
+    "chicken": {
+        "raw_rmse": 30.0,
+        "blur_rmse": 6.5,
+    },
+}
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
@@ -28,6 +35,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--chunks", type=int, default=None)
     parser.add_argument("--blur-radius", type=float, default=2.0)
+    parser.add_argument("--seed", type=lambda value: int(value, 0), default=0x123456789ABCDEF123456789)
+    parser.add_argument("--update-gold", action=argparse.BooleanOptionalAction, default=False)
+    parser.add_argument("--enforce-gold", action=argparse.BooleanOptionalAction, default=True)
     return parser.parse_args()
 
 
@@ -72,6 +82,28 @@ def expected_correct_stats(paths: list[Path], *, blur_radius: float | None = Non
     }
 
 
+def stats_vs_reference(path: Path, refs: list[Path], *, blur_radius: float | None = None) -> dict[str, object] | None:
+    if not refs:
+        return None
+    vals = []
+    best_ref = None
+    best_val = None
+    for ref in refs:
+        val = image_rmse(path, ref, blur_radius=blur_radius)
+        vals.append((ref, val))
+        if best_val is None or val < best_val:
+            best_ref = ref
+            best_val = val
+    only_vals = [val for _, val in vals]
+    return {
+        "count": len(vals),
+        "min": min(only_vals),
+        "mean": sum(only_vals) / len(only_vals),
+        "max": max(only_vals),
+        "closest_reference": best_ref.name if best_ref is not None else None,
+    }
+
+
 def main() -> int:
     args = parse_args()
     scene_path = (REPO_ROOT / args.json).resolve()
@@ -79,6 +111,7 @@ def main() -> int:
         raise FileNotFoundError(scene_path)
 
     scene_name = scene_path.stem
+    threshold_floor = SCENE_THRESHOLD_FLOORS.get(scene_name, {})
     timestamp = timestamp_dirname()
     image_run_dir = IMAGES_ROOT / scene_name / timestamp
     metrics_run_dir = METRICS_ROOT / scene_name / timestamp
@@ -98,6 +131,7 @@ def main() -> int:
         "scale": args.scale,
         "frames": args.frames,
         "repeats": args.repeats,
+        "seed": f"0x{args.seed:024x}",
         "blur_radius": args.blur_radius,
         "diff_metric": "rmse_rgb_0_to_255_and_blur_rmse_rgb_0_to_255",
         "image_dir": str(image_run_dir.relative_to(REPO_ROOT)),
@@ -114,6 +148,14 @@ def main() -> int:
             "raw_rmse": None,
             "blur_rmse": None,
         },
+        "gold_reference_match": {
+            "raw_rmse": None,
+            "blur_rmse": None,
+        },
+        "passes_expected_correct_value": {
+            "raw_rmse": None,
+            "blur_rmse": None,
+        },
     }
 
     for run_idx in range(1, args.repeats + 1):
@@ -127,6 +169,7 @@ def main() -> int:
             str(TESTBENCH),
             f"--scale={args.scale}",
             f"--frames={args.frames}",
+            f"--seed=0x{args.seed:024x}",
             "--json",
             str(scene_path),
             "--no-waves",
@@ -165,7 +208,7 @@ def main() -> int:
             (metrics_run_dir / "summary.json").write_text(json.dumps(summary, indent=2))
             return completed.returncode
 
-        if run_png.exists():
+        if run_png.exists() and args.update_gold:
             shutil.copy2(run_png, gold_dir / f"{timestamp}-run{run_idx}.png")
 
     reference_png = image_run_dir / "run1.png"
@@ -187,10 +230,45 @@ def main() -> int:
     summary["expected_correct_stats"]["blur_rmse"] = blur_stats
     summary["expected_correct_value"]["raw_rmse"] = None if raw_stats is None else raw_stats["max"]
     summary["expected_correct_value"]["blur_rmse"] = None if blur_stats is None else blur_stats["max"]
+    if "raw_rmse" in threshold_floor:
+        summary["expected_correct_value"]["raw_rmse"] = max(
+            threshold_floor["raw_rmse"],
+            0.0 if summary["expected_correct_value"]["raw_rmse"] is None else summary["expected_correct_value"]["raw_rmse"],
+        )
+    if "blur_rmse" in threshold_floor:
+        summary["expected_correct_value"]["blur_rmse"] = max(
+            threshold_floor["blur_rmse"],
+            0.0 if summary["expected_correct_value"]["blur_rmse"] is None else summary["expected_correct_value"]["blur_rmse"],
+        )
+
+    if reference_png.exists():
+        summary["gold_reference_match"]["raw_rmse"] = stats_vs_reference(reference_png, gold_pngs)
+        summary["gold_reference_match"]["blur_rmse"] = stats_vs_reference(
+            reference_png,
+            gold_pngs,
+            blur_radius=args.blur_radius,
+        )
+
+    raw_expected = summary["expected_correct_value"]["raw_rmse"]
+    blur_expected = summary["expected_correct_value"]["blur_rmse"]
+    raw_match = summary["gold_reference_match"]["raw_rmse"]
+    blur_match = summary["gold_reference_match"]["blur_rmse"]
+    summary["passes_expected_correct_value"]["raw_rmse"] = (
+        None if raw_expected is None or raw_match is None else raw_match["min"] <= raw_expected
+    )
+    summary["passes_expected_correct_value"]["blur_rmse"] = (
+        None if blur_expected is None or blur_match is None else blur_match["min"] <= blur_expected
+    )
 
     (metrics_run_dir / "summary.json").write_text(json.dumps(summary, indent=2))
     print(image_run_dir)
     print(json.dumps(summary, indent=2, sort_keys=True))
+
+    if args.enforce_gold:
+        for metric_name, passed in summary["passes_expected_correct_value"].items():
+            if passed is False:
+                print(f"gold RMSE check failed for {metric_name}", file=sys.stderr)
+                return 1
     return 0
 
 

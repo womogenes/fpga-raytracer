@@ -13,6 +13,7 @@ import shutil
 import json
 import subprocess
 import glob
+import hashlib
 from pathlib import Path
 from argparse import ArgumentParser, BooleanOptionalAction
 
@@ -43,6 +44,7 @@ parser.add_argument("--scale", type=float, default=0.5)
 parser.add_argument("--frames", type=int, default=1)
 parser.add_argument("--waves", action=BooleanOptionalAction, default=False)
 parser.add_argument("--json", type=str, default=None)
+parser.add_argument("--seed", type=lambda value: int(value, 0), default=0x123456789ABCDEF123456789)
 
 args = parser.parse_args()
 WAVES = args.waves
@@ -55,12 +57,14 @@ if "TEST_WIDTH" in os.environ:
     assert "CAM_DATA" in os.environ
     CAM_DATA = json.loads(os.environ["CAM_DATA"])
     MAX_BOUNCES = int(os.environ["MAX_BOUNCES"])
+    BASE_SEED = int(os.environ["TEST_SEED"], 0)
 
 else:
     scale = args.scale
     WIDTH = int(32 * scale)
     HEIGHT = int(18 * scale)
     N_FRAMES = args.frames
+    BASE_SEED = args.seed
 
     # Parent caller, initialize scene params
     if args.json:
@@ -78,8 +82,9 @@ else:
             "up": [0, 0, 2],
         }
         MAX_BOUNCES = 3
-        
-N_CHUNKS = args.chunks or (2 * os.cpu_count() * N_FRAMES)
+
+CPU_COUNT = os.cpu_count() or 1
+N_CHUNKS = args.chunks or (2 * CPU_COUNT * N_FRAMES)
 TOTAL_PIXELS = WIDTH * HEIGHT
 
 # Round up on chunk size
@@ -100,11 +105,15 @@ with open(SCENE_BUF_MEM_PATH, "r") as fin:
     NUM_OBJS = fin.read().strip().count("\n") + 1
 
 # Location to store chunk .npy files
-CHUNKS_OUT_DIR = proj_path / "sim" / "sim_build" / "rtx_parallel" / "chunks"
+RUN_TAG = f"{WIDTH}x{HEIGHT}_f{N_FRAMES}_seed{BASE_SEED:024x}"
+CHUNKS_OUT_DIR = proj_path / "sim" / "sim_build" / "rtx_parallel" / "chunks" / RUN_TAG
+if "PIXEL_START_IDX" not in os.environ:
+    shutil.rmtree(CHUNKS_OUT_DIR, ignore_errors=True)
 os.makedirs(CHUNKS_OUT_DIR, exist_ok=True)
 
 # Single shared build directory for all workers
-BUILD_DIR = proj_path / "sim" / "sim_build" / "rtx_parallel" / f"verilator_{WIDTH}x{HEIGHT}"
+BUILD_DIR_TAG = hashlib.sha1(str(proj_path).encode()).hexdigest()[:10]
+BUILD_DIR = proj_path / "sim" / "sim_build" / "rtx_parallel" / f"verilator_{WIDTH}x{HEIGHT}_{BUILD_DIR_TAG}"
 os.makedirs(BUILD_DIR, exist_ok=True)
 
 # Common configuration for Verilator build and test
@@ -138,13 +147,25 @@ PARAMETERS = {
 }
 
 
+def chunk_seed(chunk_idx: int) -> int:
+    mixed = (BASE_SEED ^ (0x9E3779B97F4A7C15 * (chunk_idx + 1))) & ((1 << 96) - 1)
+    lower = mixed & ((1 << 48) - 1)
+    upper = (mixed >> 48) & ((1 << 48) - 1)
+    if lower == 0:
+        mixed |= 1
+    if upper == 0:
+        mixed |= 1 << 48
+    return mixed
+
+
 @cocotb.test()
 async def test_module(dut):
     # dut._log.info("Starting...")
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
 
     # dut._log.info("Holding reset...")
-    dut.lfsr_seed.value = int.from_bytes(os.urandom(12))
+    chunk_idx = int(os.environ.get("CHUNK_IDX", "0"))
+    dut.lfsr_seed.value = chunk_seed(chunk_idx)
     dut.rst.value = 1
 
     cam_scale = WIDTH / 1280
@@ -171,8 +192,6 @@ async def test_module(dut):
     # Extract pixel_start_idx and pixel_end_idx from environment vars
     pixel_start_idx = int(os.environ["PIXEL_START_IDX"])
     pixel_end_idx = int(os.environ["PIXEL_END_IDX"])
-    chunk_idx = int(os.environ.get("CHUNK_IDX", "0"))
-
     n_pixels = pixel_end_idx - pixel_start_idx + 1
     pixel_values = np.zeros((n_pixels, 3))
     total_chunk_cycles = 0
@@ -255,6 +274,7 @@ def run_test_worker(pixel_start_idx: int, pixel_end_idx: int, chunk_idx: int):
     if CAM_DATA:
         os.environ["CAM_DATA"] = json.dumps(CAM_DATA)
         os.environ["MAX_BOUNCES"] = str(MAX_BOUNCES)
+    os.environ["TEST_SEED"] = hex(BASE_SEED)
 
     runner = get_runner(SIM)
     runner.build(
@@ -289,7 +309,8 @@ if __name__ == "__main__":
     print(f"Resolution: {WIDTH}x{HEIGHT}")
     print(f"Frames: {N_FRAMES}")
     print(f"Chunks: {NUM_CHUNKS_ACTUAL}")
-    print(f"Worker processes: {os.cpu_count()}")
+    print(f"Seed: 0x{BASE_SEED:024x}")
+    print(f"Worker processes: {CPU_COUNT}")
     print()
 
     # Build Verilator once
@@ -305,7 +326,7 @@ if __name__ == "__main__":
     # Run tests in parallel
     print("Starting parallel render...")
     render_start = time.time()
-    with Pool(processes=os.cpu_count()) as pool:
+    with Pool(processes=CPU_COUNT) as pool:
         results = pool.map(worker, tasks)
     render_time = time.time() - render_start
 
@@ -335,6 +356,7 @@ if __name__ == "__main__":
     img.save(output_file)
     metrics = {
         "frames": N_FRAMES,
+        "seed": f"0x{BASE_SEED:024x}",
         "total_cycles": total_cycles,
         "pixel_samples": total_pixel_samples,
         "output_pixels": total_output_pixels,
