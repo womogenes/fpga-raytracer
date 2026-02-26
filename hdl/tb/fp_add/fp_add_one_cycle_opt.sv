@@ -1,37 +1,61 @@
-// Hepler function: compare two floats
-function automatic logic fp_greater(fp a, fp b);
-  logic greater;
-  greater = (a.exp > b.exp) || (a.exp == b.exp && a.mant > b.mant);
-  return greater;
-endfunction
+`default_nettype none
 
-// Addition for floating points
-module fp_add (
+module fp_add_one_cycle_opt (
   input wire clk,
   input wire rst,
   input fp a,
   input fp b,
   input wire is_sub,
-
   output fp sum
 );
   localparam integer SIG_WIDTH = FP_MANT_BITS + 1;
   localparam integer FRAC_WIDTH = FP_MANT_BITS + 2;
   localparam integer SHIFT_WIDTH = $clog2(SIG_WIDTH + 1);
 
-  logic swap;
-  assign swap = ~fp_greater(a, b);
+  function automatic logic fp_abs_greater(input fp lhs, input fp rhs);
+    begin
+      fp_abs_greater = (lhs.exp > rhs.exp) || ((lhs.exp == rhs.exp) && (lhs.mant > rhs.mant));
+    end
+  endfunction
 
+  function automatic [SHIFT_WIDTH-1:0] lzd17(input logic [SIG_WIDTH-1:0] value);
+    begin
+      casez (value)
+        17'b1????????????????: lzd17 = 5'd0;
+        17'b01???????????????: lzd17 = 5'd1;
+        17'b001??????????????: lzd17 = 5'd2;
+        17'b0001?????????????: lzd17 = 5'd3;
+        17'b00001????????????: lzd17 = 5'd4;
+        17'b000001???????????: lzd17 = 5'd5;
+        17'b0000001??????????: lzd17 = 5'd6;
+        17'b00000001?????????: lzd17 = 5'd7;
+        17'b000000001????????: lzd17 = 5'd8;
+        17'b0000000001???????: lzd17 = 5'd9;
+        17'b00000000001??????: lzd17 = 5'd10;
+        17'b000000000001?????: lzd17 = 5'd11;
+        17'b0000000000001????: lzd17 = 5'd12;
+        17'b00000000000001???: lzd17 = 5'd13;
+        17'b000000000000001??: lzd17 = 5'd14;
+        17'b0000000000000001?: lzd17 = 5'd15;
+        17'b00000000000000001: lzd17 = 5'd16;
+        default: lzd17 = 5'd17;
+      endcase
+    end
+  endfunction
+
+  logic swap;
   logic [FP_EXP_BITS-1:0] exp_a, exp_b, exp_norm;
   logic sign_a, sign_b;
   logic [FP_MANT_BITS-1:0] mant_a, mant_b;
   logic [FRAC_WIDTH-1:0] frac_a, frac_b, frac_b_shift, frac_sum;
   logic [SIG_WIDTH-1:0] frac_norm;
   logic [FP_EXP_BITS-1:0] exp_diff;
-  logic [SHIFT_WIDTH-1:0] shift;
+  logic [SHIFT_WIDTH-1:0] shift_amt;
   logic both_zero;
   logic sum_is_zero;
   logic [FP_BITS-1:0] sum_next;
+
+  assign swap = ~fp_abs_greater(a, b);
 
   assign exp_a = swap ? b.exp : a.exp;
   assign exp_b = swap ? a.exp : b.exp;
@@ -43,6 +67,7 @@ module fp_add (
   assign frac_b = {2'b01, mant_b};
   assign exp_diff = exp_a - exp_b;
   assign both_zero = (exp_a == '0) && (mant_a == '0) && (exp_b == '0) && (mant_b == '0);
+  assign shift_amt = lzd17(frac_sum[SIG_WIDTH-1:0]);
 
   always_comb begin
     if (exp_diff > (FP_MANT_BITS + 1)) begin
@@ -54,27 +79,18 @@ module fp_add (
     sum_is_zero = (frac_sum == '0);
   end
 
-  clz #(.WIDTH(SIG_WIDTH)) clz_shift (
-    .x(frac_sum[SIG_WIDTH-1:0]),
-    .count(shift)
-  );
-
   always_comb begin
-    frac_norm = '0;
-    exp_norm = '0;
-    sum_next = FP_ZER0;
-
     if (both_zero || sum_is_zero) begin
       sum_next = FP_ZER0;
     end else if (frac_sum[FRAC_WIDTH-1]) begin
       frac_norm = frac_sum[FRAC_WIDTH-1:1];
       exp_norm = exp_a + 1'b1;
       sum_next = {sign_a, exp_norm, frac_norm[FP_MANT_BITS-1:0]};
-    end else if (exp_a <= shift) begin
+    end else if (exp_a <= shift_amt) begin
       sum_next = FP_ZER0;
     end else begin
-      frac_norm = frac_sum[SIG_WIDTH-1:0] << shift;
-      exp_norm = exp_a - shift;
+      frac_norm = frac_sum[SIG_WIDTH-1:0] << shift_amt;
+      exp_norm = exp_a - shift_amt;
       sum_next = {sign_a, exp_norm, frac_norm[FP_MANT_BITS-1:0]};
     end
   end
@@ -87,3 +103,5 @@ module fp_add (
     end
   end
 endmodule
+
+`default_nettype wire

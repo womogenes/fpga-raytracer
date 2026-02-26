@@ -16,7 +16,7 @@ import numpy as np
 from PIL import Image
 from tqdm import tqdm
 
-sys.path.append(Path(__file__).resolve().parent.parent._str)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from utils import convert_fp, make_fp, convert_fp_vec3
 
 WIDTH = 32 * 1
@@ -35,7 +35,7 @@ async def test_module(dut):
     await ClockCycles(dut.clk, 5)
     dut.rst.value = 0
 
-    DELAY_CYCLES = 16
+    DELAY_CYCLES = 12
 
 
     # Generate random (N, 3) tensors for inputs
@@ -92,9 +92,9 @@ async def test_module(dut):
 def runner():
     """Module tester."""
 
-    hdl_toplevel_lang = os.getenv("HDL_TOPLEVEL_LANG", "verilog")
     sim = os.getenv("SIM", "icarus")
     proj_path = Path(__file__).resolve().parent.parent.parent
+    sys.path.insert(0, str(proj_path))
     sys.path.append(str(proj_path / "sim" / "model"))
     sources = [
         proj_path / "hdl" / "pipeline.sv",
@@ -114,8 +114,8 @@ def runner():
     # values for parameters defined earlier in the code.
     parameters = {}
 
-    sys.path.append(str(proj_path / "sim"))
     hdl_toplevel = "quadratic_solver"
+    test_module = ".".join(Path(__file__).resolve().with_suffix("").relative_to(proj_path).parts)
     
     runner = get_runner(sim)
     runner.build(
@@ -131,7 +131,7 @@ def runner():
     run_test_args = []
     runner.test(
         hdl_toplevel=hdl_toplevel,
-        test_module=test_file,
+        test_module=test_module,
         test_args=run_test_args,
         waves=True,
     )

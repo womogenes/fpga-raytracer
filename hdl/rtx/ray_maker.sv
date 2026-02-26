@@ -1,7 +1,6 @@
 `default_nettype none
 
-// Make ray in 3D given camera config and pixel coordinates
-// 22-cycle delay (empirical)
+// Make ray in 3D given camera config and pixel coordinates.
 
 module ray_maker #(
   parameter WIDTH = 1280,
@@ -27,6 +26,8 @@ module ray_maker #(
   // DEBUG: to be used only for testbench
   input wire [95:0] lfsr_seed
 );
+  localparam integer RAY_MAKER_DELAY = 1 + 1 + FP_ADD_DELAY + VEC3_SCALE_DELAY + VEC3_ADD_DELAY + VEC3_NORM_DELAY;
+
   // Normalize by centering at zero
   logic signed [10:0] pixel_h_norm;
   logic signed [9:0] pixel_v_norm;
@@ -72,14 +73,13 @@ module ray_maker #(
   // Ray origin == camera origin for now
   assign ray_origin = cam.origin;
 
-  pipeline #(.WIDTH(11), .DEPTH(22)) pixel_h_pipe (.clk(clk), .in(pixel_h_in), .out(pixel_h_out));
-  pipeline #(.WIDTH(10), .DEPTH(22)) pixel_v_pipe (.clk(clk), .in(pixel_v_in), .out(pixel_v_out));
+  pipeline #(.WIDTH(11), .DEPTH(RAY_MAKER_DELAY)) pixel_h_pipe (.clk(clk), .in(pixel_h_in), .out(pixel_h_out));
+  pipeline #(.WIDTH(10), .DEPTH(RAY_MAKER_DELAY)) pixel_v_pipe (.clk(clk), .in(pixel_v_in), .out(pixel_v_out));
 
   // Pipeline the valid signal
-  // TODO: do not hard-code this
   pipeline #(
     .WIDTH(1),
-    .DEPTH(1 + 1 + 2 + 2 + 2 + VEC3_NORM_DELAY)
+    .DEPTH(RAY_MAKER_DELAY)
   ) valid_pipe (.clk(clk), .in(new_ray), .out(ray_valid));
 endmodule
 

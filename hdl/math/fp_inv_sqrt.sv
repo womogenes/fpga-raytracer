@@ -4,7 +4,7 @@
 /*
   Optimizations:
     - Ignore the `valid` pipe and just trust that this module is fully pipelined
-      with 12-cycle delay
+      with 8-cycle delay
 */
 
 /*
@@ -16,7 +16,7 @@
     y: current guess
 
   timing:
-    5 clock cycles
+    4 clock cycles
 */
 module fp_inv_sqrt_stage (
   input wire clk,
@@ -35,9 +35,9 @@ module fp_inv_sqrt_stage (
 
   fp y_piped5;
 
-  pipeline #(.WIDTH(FP_BITS), .DEPTH(5)) x_pipe (.clk(clk), .in(x), .out(x_out));
-  pipeline #(.WIDTH(FP_BITS), .DEPTH(4)) y_pipe (.clk(clk), .in(y), .out(y_piped5));
-  pipeline #(.WIDTH(1), .DEPTH(5)) valid_pipe (.clk(clk), .in(valid_in), .out(valid_out));
+  pipeline #(.WIDTH(FP_BITS), .DEPTH(4)) x_pipe (.clk(clk), .in(x), .out(x_out));
+  pipeline #(.WIDTH(FP_BITS), .DEPTH(3)) y_pipe (.clk(clk), .in(y), .out(y_piped5));
+  pipeline #(.WIDTH(1), .DEPTH(4)) valid_pipe (.clk(clk), .in(valid_in), .out(valid_out));
 
   fp y_sq;              // y * y
   fp y_sq_by_x;         // x * y * y

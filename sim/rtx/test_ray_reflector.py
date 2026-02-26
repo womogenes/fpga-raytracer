@@ -12,15 +12,35 @@ import numpy as np
 
 sys.path.append(str(Path(__file__).resolve().parent))
 sys.path.append(str(Path(__file__).resolve().parent.parent))
-from utils import make_fp_vec3
+sys.path.append(str(Path(__file__).resolve().parent.parent.parent / "ctrl"))
+from utils import convert_fp_vec3, make_fp_vec3
+from make_scene_buffer import Material
 
 
-FAST_DELAY = 19
-BLEND_DELAY = 37
+FAST_DELAY = 14
+BLEND_DELAY = 28
 TEST_MATERIALS = [
-    "3e999a3d33333c999a3b999a0000000000003f00003f00003f00003f000000",
-    "3d00003e00003e80000000003a999a3b999a3ecccd3e999a3e66663f0000ff",
-    "3c999a3e00003e999a3947ae39eb853a47ae3ecccd3e999a3b999a3e0000ff",
+    Material(
+        color=(0.5, 0.25, 0.75),
+        emit_color=(0.1, 0.2, 0.3),
+        spec_color=(0.9, 0.8, 0.7),
+        smoothness=1.0,
+        specular_prob=0.0,
+    ),
+    Material(
+        color=(0.2, 0.4, 0.6),
+        emit_color=(0.05, 0.15, 0.25),
+        spec_color=(0.8, 0.6, 0.4),
+        smoothness=1.0,
+        specular_prob=1.0,
+    ),
+    Material(
+        color=(0.7, 0.6, 0.5),
+        emit_color=(0.0, 0.0, 0.0),
+        spec_color=(0.3, 0.2, 0.9),
+        smoothness=0.5,
+        specular_prob=1.0,
+    ),
 ]
 
 test_file = os.path.basename(__file__).replace(".py", "")
@@ -36,6 +56,11 @@ def normalize(vec):
 def signal_is_high(signal) -> bool:
     value = signal.value
     return bool(value.is_resolvable and value.integer)
+
+
+def assert_vec_close(actual, expected, tol=0.03):
+    for got, want in zip(actual, expected):
+        assert abs(got - want) < tol, f"expected {expected}, got {actual}"
 
 
 async def launch_case(dut, *, ray_dir, ray_color, income_light, hit_pos, hit_normal, hit_mat_idx):
@@ -92,8 +117,9 @@ async def test_module(dut):
     )
     await wait_for_done(dut, FAST_DELAY - 1)
     assert dut.mat_dict_idx.value.integer == 0
+    assert_vec_close(convert_fp_vec3(dut.new_color.value), (0.375, 0.125, 0.1875))
+    assert_vec_close(convert_fp_vec3(dut.new_income_light.value), (0.175, 0.3, 0.375))
     await ClockCycles(dut.clk, 2)
-    await ClockCycles(dut.clk, 4)
 
     in_dir = normalize((1.0, -1.0, -0.5))
     normal = normalize((0.0, 0.0, 1.0))
@@ -111,8 +137,9 @@ async def test_module(dut):
     )
     await wait_for_done(dut, FAST_DELAY - 1)
     assert dut.mat_dict_idx.value.integer == 1
+    assert_vec_close(convert_fp_vec3(dut.new_color.value), (0.72, 0.24, 0.08))
+    assert_vec_close(convert_fp_vec3(dut.new_income_light.value), (0.045, 0.31, 0.55))
     await ClockCycles(dut.clk, 2)
-    await ClockCycles(dut.clk, 4)
 
     ray_color = (0.6, 0.7, 0.8)
     income_light = (0.3, 0.2, 0.1)
@@ -136,7 +163,12 @@ def runner():
     build_dir = proj_path / "sim" / "sim_build"
     build_data_dir = build_dir / "data"
     build_data_dir.mkdir(parents=True, exist_ok=True)
-    (build_data_dir / "test_ray_reflector_mat_dict.mem").write_text("\n".join(TEST_MATERIALS) + "\n")
+    mat_lines = []
+    for material in TEST_MATERIALS:
+        bits, width = material.pack_bits()
+        mat_lines.append(hex(bits)[2:].zfill((width + 3) // 4))
+    (build_data_dir / "test_ray_reflector_mat_dict.mem").write_text("\n".join(mat_lines) + "\n")
+    sys.path.insert(0, str(proj_path))
     sys.path.append(str(proj_path / "sim" / "model"))
     sources = [
         proj_path / "hdl" / "constants.sv",
@@ -171,7 +203,7 @@ def runner():
     )
     runner.test(
         hdl_toplevel="ray_reflector_tb",
-        test_module=test_file,
+        test_module=".".join(Path(__file__).resolve().with_suffix("").relative_to(proj_path).parts),
         test_args=[],
         waves=True,
     )

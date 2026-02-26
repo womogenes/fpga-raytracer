@@ -12,12 +12,14 @@ from enum import Enum
 import random
 import ctypes
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from PIL import Image
 from tqdm import tqdm
 
-sys.path.append(Path(__file__).resolve().parent.parent._str)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from utils import convert_fp, make_fp, convert_fp_vec3, make_fp_vec3
 
 WIDTH = 32 * 1
@@ -77,6 +79,9 @@ async def test_module(dut):
             # points.append(dirvec)
         await ClockCycles(dut.clk, 1)
 
+    assert points, "expected at least one sphere hit"
+    assert normalpoints, "expected at least one normal sample"
+
     fig = plt.figure(figsize=(12, 12))
     ax = fig.add_subplot(projection='3d')
     ax.set_aspect('equal')
@@ -84,21 +89,21 @@ async def test_module(dut):
     ax.set_ylim3d(-2, 5)
     ax.set_zlim3d(-2, 2)
 
-    x_data, y_data, z_data = zip(*points)
-
-    ax.scatter(x_data, y_data, z_data, s=2, alpha=1, color="blue")
-    x_data, y_data, z_data = zip(*normalpoints)
-
-    ax.scatter(x_data, y_data, z_data, s=2, alpha=1, color="red")
-    plt.show()
+    if points:
+        x_data, y_data, z_data = zip(*points)
+        ax.scatter(x_data, y_data, z_data, s=2, alpha=1, color="blue")
+    if normalpoints:
+        x_data, y_data, z_data = zip(*normalpoints)
+        ax.scatter(x_data, y_data, z_data, s=2, alpha=1, color="red")
+    plt.close(fig)
 
 
 def runner():
     """Module tester."""
 
-    hdl_toplevel_lang = os.getenv("HDL_TOPLEVEL_LANG", "verilog")
     sim = os.getenv("SIM", "icarus")
     proj_path = Path(__file__).resolve().parent.parent.parent
+    sys.path.insert(0, str(proj_path))
     sys.path.append(str(proj_path / "sim" / "model"))
     sources = [
         proj_path / "hdl" / "pipeline.sv",
@@ -119,8 +124,8 @@ def runner():
     # values for parameters defined earlier in the code.
     parameters = {}
 
-    sys.path.append(str(proj_path / "sim"))
     hdl_toplevel = "sphere_intersector"
+    test_module = ".".join(Path(__file__).resolve().with_suffix("").relative_to(proj_path).parts)
     
     runner = get_runner(sim)
     runner.build(
@@ -136,7 +141,7 @@ def runner():
     run_test_args = []
     runner.test(
         hdl_toplevel=hdl_toplevel,
-        test_module=test_file,
+        test_module=test_module,
         test_args=run_test_args,
         waves=True,
     )

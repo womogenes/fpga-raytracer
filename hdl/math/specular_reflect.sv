@@ -16,7 +16,7 @@ module specular_reflect (
   fp_vec3 normal_scaled;
 
   // Calculate dot product times 2
-  // VEC3_DOT_DELAY (5) cycles behind
+  // VEC3_DOT_DELAY (3) cycles behind
   fp_vec3_dot dot1(
     .clk(clk),
     .v(in_dir),
@@ -34,7 +34,7 @@ module specular_reflect (
   );
 
   // Multiply dot by normal vector
-  // VEC3_DOT_DELAY + VEC3_SCALE_DELAY (6) cycles behind
+  // VEC3_DOT_DELAY + VEC3_SCALE_DELAY (4) cycles behind
   fp_vec3_scale scale_norm (
     .clk(clk),
     .v(normal_piped),
@@ -48,7 +48,7 @@ module specular_reflect (
   );
 
   // Calculate difference
-  // VEC3_DOT_DELAY + VEC3_SCALE_DELAY + VEC3_ADD_DELAY (8) cycles behind
+  // VEC3_DOT_DELAY + VEC3_SCALE_DELAY + VEC3_ADD_DELAY (5) cycles behind
   fp_vec3_add add_out_dir (
     .clk(clk),
     .v(in_dir_piped),

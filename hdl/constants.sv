@@ -29,22 +29,22 @@ parameter fp FP_INV_SQRT_MAGIC_NUM = 'h5e66e8; // (1.5672% error)
 parameter fp FP_INV_MAGIC_NUM = 'h7ddf0a; // (2.8912% error)
  
 // Basic math operation delays
-parameter integer FP_ADD_DELAY = 2;
+parameter integer FP_ADD_DELAY = 1;
 parameter integer FP_MUL_DELAY = 1;
 
 // Math module delay counts
 parameter integer INV_SQRT_NR_STAGES = 2;
-parameter integer INV_SQRT_STAGE_DELAY = 5;
+parameter integer INV_SQRT_STAGE_DELAY = 4;
 parameter integer INV_SQRT_DELAY = INV_SQRT_NR_STAGES * INV_SQRT_STAGE_DELAY;
 
-// empirically 11
+// empirically 9
 parameter integer SQRT_DELAY = INV_SQRT_DELAY + 1;
 
 // ===== FP VEC OPS =====
-parameter integer VEC3_ADD_DELAY = FP_ADD_DELAY;  // 2
+parameter integer VEC3_ADD_DELAY = FP_ADD_DELAY;  // 1
 parameter integer VEC3_MUL_DELAY = FP_MUL_DELAY;  // 1
-parameter integer VEC3_DOT_DELAY = 5;
-parameter integer VEC3_CROSS_DELAY = 3;
+parameter integer VEC3_DOT_DELAY = 3;
+parameter integer VEC3_CROSS_DELAY = 2;
 parameter integer VEC3_SCALE_DELAY = FP_MUL_DELAY;
-parameter integer VEC3_NORM_DELAY = VEC3_DOT_DELAY + INV_SQRT_DELAY + 1;  // 16
+parameter integer VEC3_NORM_DELAY = VEC3_DOT_DELAY + INV_SQRT_DELAY + 1;  // 12
 parameter integer VEC3_LERP_DELAY = VEC3_SCALE_DELAY + VEC3_ADD_DELAY;

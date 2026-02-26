@@ -12,12 +12,14 @@ from enum import Enum
 import random
 import ctypes
 import numpy as np
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from PIL import Image
 from tqdm import tqdm
 
-sys.path.append(Path(__file__).resolve().parent.parent._str)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from utils import convert_fp, make_fp, convert_fp_vec3, make_fp_vec3
 
 WIDTH = 32 * 1
@@ -77,7 +79,7 @@ async def test_module(dut):
         random_dir = np.array([random_val[0] - 0.5, 0.5, random_val[1] - 0.5])
         dirvec = random_dir / np.linalg.vector_norm(random_dir)
         dut.ray_dir.value = make_fp_vec3(dirvec)
-        await ClockCycles(dut.clk, 20)
+        await ClockCycles(dut.clk, 14)
         await ReadOnly()
         if dut.hit.value:
             # print(convert_fp_vec3(dut.hit_pos.value))
@@ -88,6 +90,8 @@ async def test_module(dut):
             missedpoints.append(convert_fp_vec3(dut.hit_pos.value))
         await ClockCycles(dut.clk, 1)
 
+    assert points or missedpoints, "expected at least one trig sample"
+
     fig = plt.figure(figsize=(12, 12))
     ax = fig.add_subplot(projection='3d')
     ax.set_aspect('equal')
@@ -95,22 +99,21 @@ async def test_module(dut):
     ax.set_ylim3d(-2, 6)
     ax.set_zlim3d(-3, 3)
 
-    if len(points) > 0:
+    if points:
         x_data, y_data, z_data = zip(*points)
-
         ax.scatter(x_data, y_data, z_data, s=2, alpha=1, color="blue")
-    x_data, y_data, z_data = zip(*missedpoints)
-
-    ax.scatter(x_data, y_data, z_data, s=2, alpha=1, color="red")
-    plt.show()
+    if missedpoints:
+        x_data, y_data, z_data = zip(*missedpoints)
+        ax.scatter(x_data, y_data, z_data, s=2, alpha=1, color="red")
+    plt.close(fig)
 
 
 def runner():
     """Module tester."""
 
-    hdl_toplevel_lang = os.getenv("HDL_TOPLEVEL_LANG", "verilog")
     sim = os.getenv("SIM", "icarus")
     proj_path = Path(__file__).resolve().parent.parent.parent
+    sys.path.insert(0, str(proj_path))
     sys.path.append(str(proj_path / "sim" / "model"))
     sources = [
         proj_path / "hdl" / "pipeline.sv",
@@ -131,8 +134,8 @@ def runner():
     # values for parameters defined earlier in the code.
     parameters = {}
 
-    sys.path.append(str(proj_path / "sim"))
     hdl_toplevel = "trig_intersector"
+    test_module = ".".join(Path(__file__).resolve().with_suffix("").relative_to(proj_path).parts)
     
     runner = get_runner(sim)
     runner.build(
@@ -148,7 +151,7 @@ def runner():
     run_test_args = []
     runner.test(
         hdl_toplevel=hdl_toplevel,
-        test_module=test_file,
+        test_module=test_module,
         test_args=run_test_args,
         waves=True,
     )

@@ -24,8 +24,8 @@ module fp_inv_stage (
 
   fp y_piped3;
 
-  pipeline #(.WIDTH(FP_BITS), .DEPTH(4)) x_pipe (.clk(clk), .in(x), .out(x_out));
-  pipeline #(.WIDTH(FP_BITS), .DEPTH(3)) y_pipe (.clk(clk), .in(y), .out(y_piped3));
+  pipeline #(.WIDTH(FP_BITS), .DEPTH(3)) x_pipe (.clk(clk), .in(x), .out(x_out));
+  pipeline #(.WIDTH(FP_BITS), .DEPTH(2)) y_pipe (.clk(clk), .in(y), .out(y_piped3));
 
   fp x_by_y;
   fp two_minus_xby;
@@ -44,7 +44,7 @@ endmodule
     INV_DELAY (INV_NR_STAGES * INV_STAGE_DELAY)
 */
 parameter integer INV_NR_STAGES = 2;
-parameter integer INV_STAGE_DELAY = 4;
+parameter integer INV_STAGE_DELAY = 3;
 parameter integer INV_DELAY = INV_NR_STAGES * INV_STAGE_DELAY;
 
 module fp_inv (

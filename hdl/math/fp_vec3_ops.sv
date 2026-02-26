@@ -1,7 +1,7 @@
 /*
   Add a vec3 to a vec3
 
-  Timing: 2 cycles
+  Timing: 1 cycle
 */
 
 `default_nettype none
@@ -76,7 +76,7 @@ endmodule
 
   Timing:
     VEC3_DOT_DELAY cycles
-    Currently 5 (mul - 1, add - 2, add - 2)
+    Currently 3 (mul - 1, add - 1, add - 1)
 */
 module fp_vec3_dot (
   input wire clk,
@@ -94,7 +94,7 @@ module fp_vec3_dot (
   fp_add add_xy(.clk(clk), .a(prod.x), .b(prod.y), .is_sub(1'b0), .sum(sum_xy));
 
   // Store z-value because pipeline timing
-  pipeline #(.WIDTH(FP_BITS), .DEPTH(2)) z_pipe (.clk(clk), .in(prod.z), .out(z_piped2));
+  pipeline #(.WIDTH(FP_BITS), .DEPTH(1)) z_pipe (.clk(clk), .in(prod.z), .out(z_piped2));
 
   // Final add
   fp_add add_xyz(.clk(clk), .a(sum_xy), .b(z_piped2), .is_sub(1'b0), .sum(dot));
@@ -105,7 +105,7 @@ endmodule
 
   Timing:
     VEC3_CROSS_DELAY cycles
-    Currently 3 (mul - 1, add - 2)
+    Currently 2 (mul - 1, add - 1)
 */
 module fp_vec3_cross (
   input wire clk,
@@ -173,7 +173,7 @@ endmodule
   Lerp between two fp_vec3s. Requires both t and one_sub_t for efficiency.
 
   Timing:
-    3 cycles: scale (1) + add (2)
+    2 cycles: scale (1) + add (1)
 */
 module fp_vec3_lerp (
   input wire clk,

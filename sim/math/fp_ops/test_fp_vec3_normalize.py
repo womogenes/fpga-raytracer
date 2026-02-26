@@ -14,9 +14,7 @@ import ctypes
 import numpy as np
 import math
 
-import matplotlib.pyplot as plt
-
-sys.path.append(Path(__file__).resolve().parent.parent.parent._str)
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from utils import convert_fp, make_fp, make_fp_vec3, convert_fp_vec3
 
 test_file = os.path.basename(__file__).replace(".py", "")
@@ -34,7 +32,7 @@ async def test_module(dut):
     await ClockCycles(dut.clk, 3)
     dut.rst.value = 0
 
-    DELAY_CYCLES = 16
+    DELAY_CYCLES = 12
 
     N_SAMPLES = 1000
 
@@ -74,9 +72,9 @@ async def test_module(dut):
 def runner():
     """Module tester."""
 
-    hdl_toplevel_lang = os.getenv("HDL_TOPLEVEL_LANG", "verilog")
     sim = os.getenv("SIM", "icarus")
     proj_path = Path(__file__).resolve().parent.parent.parent.parent
+    sys.path.insert(0, str(proj_path))
     sys.path.append(str(proj_path / "sim" / "model"))
     sources = [
         proj_path / "hdl" / "pipeline.sv",
@@ -94,8 +92,8 @@ def runner():
     # values for parameters defined earlier in the code.
     parameters = {}
 
-    sys.path.append(str(proj_path / "sim"))
     hdl_toplevel = "fp_vec3_normalize"
+    test_module = ".".join(Path(__file__).resolve().with_suffix("").relative_to(proj_path).parts)
     
     runner = get_runner(sim)
     runner.build(
@@ -111,7 +109,7 @@ def runner():
     run_test_args = []
     runner.test(
         hdl_toplevel=hdl_toplevel,
-        test_module=test_file,
+        test_module=test_module,
         test_args=run_test_args,
         waves=True,
     )
