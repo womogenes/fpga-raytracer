@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -22,11 +22,12 @@ METRICS_ROOT = REPO_ROOT / "metrics"
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--json", required=True)
+    parser.add_argument("--json", default="ctrl/scenes/canonical_balls.json")
     parser.add_argument("--scale", type=float, default=2.0)
     parser.add_argument("--frames", type=int, default=1)
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--chunks", type=int, default=None)
+    parser.add_argument("--blur-radius", type=float, default=2.0)
     return parser.parse_args()
 
 
@@ -34,9 +35,16 @@ def timestamp_dirname() -> str:
     return datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
 
-def image_rmse(path_a: Path, path_b: Path) -> float:
-    pil_a = Image.open(path_a).convert("RGB")
-    pil_b = Image.open(path_b).convert("RGB")
+def _load_rgb(path: Path, *, blur_radius: float | None = None) -> Image.Image:
+    img = Image.open(path).convert("RGB")
+    if blur_radius:
+        img = img.filter(ImageFilter.GaussianBlur(radius=blur_radius))
+    return img
+
+
+def image_rmse(path_a: Path, path_b: Path, *, blur_radius: float | None = None) -> float:
+    pil_a = _load_rgb(path_a, blur_radius=blur_radius)
+    pil_b = _load_rgb(path_b, blur_radius=blur_radius)
     if pil_a.size != pil_b.size:
         common_size = (
             min(pil_a.size[0], pil_b.size[0]),
@@ -49,6 +57,21 @@ def image_rmse(path_a: Path, path_b: Path) -> float:
     return float(np.sqrt(np.mean((img_a - img_b) ** 2)))
 
 
+def expected_correct_stats(paths: list[Path], *, blur_radius: float | None = None) -> dict[str, float] | None:
+    if len(paths) < 2:
+        return None
+    vals = []
+    for idx, path_a in enumerate(paths):
+        for path_b in paths[idx + 1 :]:
+            vals.append(image_rmse(path_a, path_b, blur_radius=blur_radius))
+    return {
+        "count": len(vals),
+        "min": min(vals),
+        "mean": sum(vals) / len(vals),
+        "max": max(vals),
+    }
+
+
 def main() -> int:
     args = parse_args()
     scene_path = (REPO_ROOT / args.json).resolve()
@@ -59,8 +82,10 @@ def main() -> int:
     timestamp = timestamp_dirname()
     image_run_dir = IMAGES_ROOT / scene_name / timestamp
     metrics_run_dir = METRICS_ROOT / scene_name / timestamp
+    gold_dir = IMAGES_ROOT / scene_name / "_gold"
     image_run_dir.mkdir(parents=True, exist_ok=False)
     metrics_run_dir.mkdir(parents=True, exist_ok=False)
+    gold_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(scene_path, metrics_run_dir / scene_path.name)
 
     width = int(32 * args.scale)
@@ -74,11 +99,22 @@ def main() -> int:
         "scale": args.scale,
         "frames": args.frames,
         "repeats": args.repeats,
-        "diff_metric": "rmse_rgb_0_to_255",
+        "blur_radius": args.blur_radius,
+        "diff_metric": "rmse_rgb_0_to_255_and_blur_rmse_rgb_0_to_255",
         "image_dir": str(image_run_dir.relative_to(REPO_ROOT)),
         "metrics_dir": str(metrics_run_dir.relative_to(REPO_ROOT)),
+        "gold_dir": str(gold_dir.relative_to(REPO_ROOT)),
         "runs": [],
-        "rmse_vs_run1": {},
+        "raw_rmse_vs_run1": {},
+        "blur_rmse_vs_run1": {},
+        "expected_correct_value": {
+            "raw_rmse": None,
+            "blur_rmse": None,
+        },
+        "expected_correct_stats": {
+            "raw_rmse": None,
+            "blur_rmse": None,
+        },
     }
 
     for run_idx in range(1, args.repeats + 1):
@@ -130,15 +166,32 @@ def main() -> int:
             (metrics_run_dir / "summary.json").write_text(json.dumps(summary, indent=2))
             return completed.returncode
 
+        if run_png.exists():
+            shutil.copy2(run_png, gold_dir / f"{timestamp}-run{run_idx}.png")
+
     reference_png = image_run_dir / "run1.png"
     if reference_png.exists():
         for run_idx in range(2, args.repeats + 1):
             run_png = image_run_dir / f"run{run_idx}.png"
             if run_png.exists():
-                summary["rmse_vs_run1"][f"run{run_idx}"] = image_rmse(reference_png, run_png)
+                summary["raw_rmse_vs_run1"][f"run{run_idx}"] = image_rmse(reference_png, run_png)
+                summary["blur_rmse_vs_run1"][f"run{run_idx}"] = image_rmse(
+                    reference_png,
+                    run_png,
+                    blur_radius=args.blur_radius,
+                )
+
+    gold_pngs = sorted(gold_dir.glob("*.png"))
+    raw_stats = expected_correct_stats(gold_pngs)
+    blur_stats = expected_correct_stats(gold_pngs, blur_radius=args.blur_radius)
+    summary["expected_correct_stats"]["raw_rmse"] = raw_stats
+    summary["expected_correct_stats"]["blur_rmse"] = blur_stats
+    summary["expected_correct_value"]["raw_rmse"] = None if raw_stats is None else raw_stats["max"]
+    summary["expected_correct_value"]["blur_rmse"] = None if blur_stats is None else blur_stats["max"]
 
     (metrics_run_dir / "summary.json").write_text(json.dumps(summary, indent=2))
     print(image_run_dir)
+    print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
 
 
