@@ -84,6 +84,7 @@ def make_material(
     emit_color=0,
     spec_color=0,
     smooth=0,
+    one_sub_smooth=0,
     specular=0,
 ):
     return pack_bits([
@@ -91,6 +92,7 @@ def make_material(
         (emit_color, FP_VEC3_BITS),
         (spec_color, FP_VEC3_BITS),
         (smooth, FP_BITS),
+        (one_sub_smooth, FP_BITS),
         (specular, 8),
     ])
 

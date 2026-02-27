@@ -78,6 +78,7 @@ def runner():
     hdl_toplevel_lang = os.getenv("HDL_TOPLEVEL_LANG", "verilog")
     sim = os.getenv("SIM", "icarus")
     proj_path = Path(__file__).resolve().parent.parent.parent
+    build_dir = proj_path / "sim" / "sim_build" / f"{test_file}_{sim}"
     sys.path.append(str(proj_path / "sim" / "model"))
     sources = [
         proj_path / "hdl" / "pipeline.sv",
@@ -105,7 +106,7 @@ def runner():
         parameters={},
         timescale=("1ns", "1ps"),
         waves=True,
-        build_dir=(proj_path / "sim" / "sim_build"),
+        build_dir=build_dir,
     )
     runner.test(
         hdl_toplevel=hdl_toplevel,

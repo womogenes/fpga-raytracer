@@ -39,6 +39,7 @@ typedef struct packed {
   fp_color emit_color;
   fp_color spec_color;
   fp smoothness;
+  fp one_sub_smoothness;
   logic [7:0] specular_prob;  // 8 bits
 } material;
 
