@@ -17,8 +17,8 @@ module ray_intersector (
   input wire [$clog2(MAX_NUM_OBJS)-1:0] num_objs,
   input object obj
 );
-  logic [$clog2(MAX_NUM_OBJS + 1)-1:0] pre_obj_count;
   logic [$clog2(MAX_NUM_OBJS + 1)-1:0] post_obj_count;
+  logic first_result;
   logic last_obj;
   logic processing_obj;
 
@@ -32,13 +32,9 @@ module ray_intersector (
     .out(ray_valid_piped)
   );
 
-  assign processing_obj =
-    (ray_valid_piped === 1'b1) ||
-    ((num_objs > 1) && (post_obj_count < num_objs - 1));
-  assign last_obj = (num_objs != 0) && (
-    ((ray_valid_piped === 1'b1) && (num_objs == 1)) ||
-    ((num_objs > 1) && (ray_valid_piped === 1'b0) && (post_obj_count == num_objs - 2))
-  );
+  assign first_result = ray_valid_piped === 1'b1;
+  assign processing_obj = first_result || ((num_objs > 1) && (post_obj_count < num_objs - 1));
+  assign last_obj = (num_objs == 1) ? first_result : ((num_objs > 1) && (post_obj_count == num_objs - 2));
 
   logic sphere_intx_hit;
   fp_vec3 sphere_intx_hit_pos;
@@ -145,16 +141,9 @@ module ray_intersector (
       hit_pos <= 0;
       hit_any <= 1'b0;
       hit_dist <= 1'b0;
-      pre_obj_count <= num_objs;
       post_obj_count <= num_objs;
     end else begin
-      if (ray_valid) begin
-        pre_obj_count <= 0;
-      end else if (pre_obj_count < num_objs) begin
-        pre_obj_count <= pre_obj_count + 1;
-      end
-
-      if (ray_valid_piped) begin
+      if (first_result) begin
         post_obj_count <= 0;
       end else if (post_obj_count < num_objs) begin
         post_obj_count <= post_obj_count + 1;
@@ -162,7 +151,7 @@ module ray_intersector (
 
       if (processing_obj) begin
         if (obj_type_piped != 2'b00) begin
-          if (ray_valid_piped) begin
+          if (first_result) begin
             if (trig_intx_hit) begin
               hit_mat_idx <= obj_intx_mat_idx;
               hit_pos <= trig_intx_hit_pos;
@@ -180,7 +169,7 @@ module ray_intersector (
             hit_any <= 1'b1;
           end
         end else begin
-          if (ray_valid_piped) begin
+          if (first_result) begin
             if (sphere_intx_hit) begin
               hit_mat_idx <= obj_intx_mat_idx;
               hit_pos <= sphere_intx_hit_pos;
