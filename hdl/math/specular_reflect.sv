@@ -9,8 +9,8 @@ module specular_reflect (
 
   output fp_vec3 out_dir
 );
-  fp_vec3 dot_in_norm;
-  fp_vec3 dot_in_norm_x2;
+  fp dot_in_norm;
+  fp dot_in_norm_x2;
   fp_vec3 normal_piped;
   fp_vec3 in_dir_piped;
   fp_vec3 normal_scaled;
@@ -23,8 +23,8 @@ module specular_reflect (
     .w(normal),
     .dot(dot_in_norm)
   );
-  fp_vec3_shift #(.SHIFT_AMT(1)) shift1 (
-    .v(dot_in_norm),
+  fp_shift #(.SHIFT_AMT(1)) shift1 (
+    .a(dot_in_norm),
     .shifted(dot_in_norm_x2)
   );
   pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(VEC3_DOT_DELAY)) normal_pipe (

@@ -18,11 +18,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 TESTBENCH = REPO_ROOT / "sim" / "rtx" / "test_rtx_parallel.py"
 IMAGES_ROOT = REPO_ROOT / "images"
 METRICS_ROOT = REPO_ROOT / "metrics"
+RENDER_DATA_ROOT = REPO_ROOT / "sim" / "sim_build" / "render_data"
 
 SCENE_THRESHOLD_FLOORS = {
     "chicken": {
         "raw_rmse": 30.0,
-        "blur_rmse": 7.0,
+        "blur_rmse": 6.5,
     },
 }
 
@@ -125,14 +126,13 @@ def main() -> int:
     image_run_dir = IMAGES_ROOT / scene_name / timestamp
     metrics_run_dir = METRICS_ROOT / scene_name / timestamp
     gold_dir = IMAGES_ROOT / scene_name / "_gold"
+    render_data_dir = RENDER_DATA_ROOT / scene_name / timestamp
     image_run_dir.mkdir(parents=True, exist_ok=False)
     metrics_run_dir.mkdir(parents=True, exist_ok=False)
+    render_data_dir.mkdir(parents=True, exist_ok=False)
     gold_dir.mkdir(parents=True, exist_ok=True)
-
     width = int(32 * args.scale)
     height = int(18 * args.scale)
-    root_png = REPO_ROOT / f"test_rtx_{width}x{height}_f{args.frames}.png"
-    root_metrics = root_png.with_suffix(".metrics.json")
 
     summary: dict[str, object] = {
         "scene": scene_path.name,
@@ -150,6 +150,7 @@ def main() -> int:
         "image_dir": str(image_run_dir.relative_to(REPO_ROOT)),
         "metrics_dir": str(metrics_run_dir.relative_to(REPO_ROOT)),
         "gold_dir": str(gold_dir.relative_to(REPO_ROOT)),
+        "render_data_dir": str(render_data_dir.relative_to(REPO_ROOT)),
         "gold_reference_compatibility": {
             "required_size": {
                 "width": width,
@@ -180,11 +181,8 @@ def main() -> int:
     }
 
     for run_idx in range(1, args.repeats + 1):
-        for stale_path in (root_png, root_metrics):
-            if stale_path.exists():
-                stale_path.unlink()
-
         run_log = metrics_run_dir / f"run{run_idx}.log"
+        output_prefix = metrics_run_dir / f"render_{scene_name}_{int(32 * args.scale)}x{int(18 * args.scale)}_f{args.frames}_run{run_idx}"
         cmd = [
             sys.executable,
             str(TESTBENCH),
@@ -193,6 +191,10 @@ def main() -> int:
             f"--seed=0x{args.seed:024x}",
             "--json",
             str(scene_path),
+            "--data-dir",
+            str(render_data_dir),
+            "--output-prefix",
+            str(output_prefix),
             "--no-waves",
         ]
         if args.chunks is not None:
@@ -208,11 +210,13 @@ def main() -> int:
 
         run_png = image_run_dir / f"run{run_idx}.png"
         run_metrics = metrics_run_dir / f"run{run_idx}.metrics.json"
+        output_png = output_prefix.with_suffix(".png")
+        output_metrics = output_prefix.with_suffix(".metrics.json")
 
-        if root_png.exists():
-            shutil.move(root_png, run_png)
-        if root_metrics.exists():
-            shutil.move(root_metrics, run_metrics)
+        if output_png.exists():
+            shutil.move(output_png, run_png)
+        if output_metrics.exists():
+            shutil.move(output_metrics, run_metrics)
 
         run_record: dict[str, object] = {
             "run": run_idx,
@@ -245,6 +249,8 @@ def main() -> int:
                 )
 
     gold_pngs = sorted(gold_dir.glob("*.png"))
+    if args.enforce_gold and not gold_pngs:
+        raise FileNotFoundError(f"no gold references found for scene {scene_name}: {gold_dir}")
     compatible_gold_pngs = compatible_gold_refs(gold_pngs, required_size=(width, height))
     summary["gold_reference_compatibility"]["available_gold_count"] = len(gold_pngs)
     summary["gold_reference_compatibility"]["compatible_gold_count"] = len(compatible_gold_pngs)
