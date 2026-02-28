@@ -8,11 +8,11 @@ Run `python3 tools/vivado_metrics.py` from this directory. On macOS, this uses t
 
 # Rendering flow
 
-Run `python3 tools/render_scene_parallel.py` from this directory. By default it renders `ctrl/scenes/canonical_balls.json`; pass `--json` to use another scene. It writes PNGs under `images/<scene>/<timestamp>/` and run logs plus metrics under `metrics/<scene>/<timestamp>/`.
+Run `python3 tools/render_scene_parallel.py [scene_name]` from this directory. The tool assumes scenes live under `ctrl/scenes/<scene_name>.json`, renders at the fixed `scale=2` and `frames=4` settings from `tools/ref/s2f4/manifest.json`, and prints a short pass/fail report with RMSEs and elapsed time.
 
 # Correctness metrics
 
-Use the rendered PNGs to compare against `images/<scene>/_gold/`. The render tool reports `raw_rmse_vs_run1`, `blur_rmse_vs_run1`, and `expected_correct_value` for both metrics. Lower is better; compare candidates against the scene-matched gold set.
+Use the rendered PNGs to compare against `tools/ref/s2f4/<scene>.png`. Thresholds live in `tools/ref/s2f4/manifest.json`, and the render tool reports one raw RMSE and one blur RMSE against that inferred reference image.
 
 # Efficiency metrics
 

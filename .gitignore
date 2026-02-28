@@ -29,5 +29,8 @@ project_2
 /*.png
 /metrics/
 
-#vibe coding
+# vibe coding
 .cursor/
+
+# venvs
+.venv/

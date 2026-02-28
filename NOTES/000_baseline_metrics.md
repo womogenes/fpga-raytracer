@@ -12,3 +12,5 @@ Using the `summary.json` entries under `metrics/`, one row per scene. For scenes
 | super_shiny_balls       | 4,727,808    | 513.000            |
 
 This is our baseline. We would like to improve against this.
+
+For the active RMSE scenes, these baseline cycles-per-pixel-per-frame values are also copied into `tools/ref/s2f4/manifest.json` as `baseline_cppf`.

@@ -1,0 +1,31 @@
+{
+  "scale": 2,
+  "frames": 4,
+  "blur_radius": 2.0,
+  "scenes": [
+    {
+      "name": "canonical_balls",
+      "baseline_cppf": 150.992,
+      "raw_rmse": 40,
+      "blur_rmse": 6
+    },
+    {
+      "name": "chicken",
+      "baseline_cppf": 902.749,
+      "raw_rmse": 27,
+      "blur_rmse": 5
+    },
+    {
+      "name": "knight",
+      "baseline_cppf": 2396.996,
+      "raw_rmse": 25,
+      "blur_rmse": 5
+    },
+    {
+      "name": "shiny_balls",
+      "baseline_cppf": 432.0,
+      "raw_rmse": 42,
+      "blur_rmse": 7
+    }
+  ]
+}
