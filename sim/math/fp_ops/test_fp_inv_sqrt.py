@@ -14,7 +14,7 @@ import ctypes
 import numpy as np
 import math
 
-sys.path.append(Path(__file__).resolve().parent.parent.parent._str)
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from utils import convert_fp, make_fp
 
 test_file = os.path.basename(__file__).replace(".py", "")
@@ -34,7 +34,7 @@ async def test_pipeline(dut):
     dut.rst.value = 0
 
     # Assume some-cycle delay for this module
-    DELAY_CYCLES = 10
+    DELAY_CYCLES = 8
 
     N_SAMPLES = 100
     x = np.exp2(np.random.rand(N_SAMPLES) * 63 - 31)
@@ -138,9 +138,9 @@ async def test_module(dut):
 def runner():
     """Module tester."""
 
-    hdl_toplevel_lang = os.getenv("HDL_TOPLEVEL_LANG", "verilog")
     sim = os.getenv("SIM", "icarus")
     proj_path = Path(__file__).resolve().parent.parent.parent.parent
+    sys.path.insert(0, str(proj_path))
     sys.path.append(str(proj_path / "sim" / "model"))
     sources = [
         proj_path / "hdl" / "constants.sv",
@@ -158,8 +158,8 @@ def runner():
     # values for parameters defined earlier in the code.
     parameters = {}
 
-    sys.path.append(str(proj_path / "sim"))
     hdl_toplevel = "fp_inv_sqrt"
+    test_module = ".".join(Path(__file__).resolve().with_suffix("").relative_to(proj_path).parts)
     
     runner = get_runner(sim)
     runner.build(
@@ -175,7 +175,7 @@ def runner():
     run_test_args = []
     runner.test(
         hdl_toplevel=hdl_toplevel,
-        test_module=test_file,
+        test_module=test_module,
         test_args=run_test_args,
         waves=True,
     )

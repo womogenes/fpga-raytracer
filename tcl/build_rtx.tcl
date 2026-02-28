@@ -4,24 +4,9 @@
 #due to a process watchdog.
 set_param general.maxThreads 16
 #Define target part and create output directory
-
-# The ??? uses this chip:
-# ??? refers to the fact that it is a ???
-# ??? refers to its package it is in
-# ??? to the "speed grade" of the chip
-
-# set partNum xc7a200t-fbg484-1
 set partNum xc7k325t-ffg900-2
 set outputDir obj_rtx
 file mkdir $outputDir
-set files [glob -nocomplain "$outputDir/*"]
-# if {[llength $files] != 0} {
-#     # clear folder contents
-#     puts "deleting contents of $outputDir"
-#     file delete -force {*}[glob -directory $outputDir *];
-# } else {
-#     puts "$outputDir is empty"
-# }
 
 # read in all system verilog files:
 set sources_sv [ concat \
@@ -52,8 +37,6 @@ if {[llength $sources_v] > 0 } {
 }
 
 # read in constraint files:
-# - Shared pin/IO constraints live in `xdc/top_level.xdc`.
-# - RTX-only net constraints live in `xdc/top_level_rtx_spec.xdc`.
 read_xdc ./xdc/top_level.xdc
 read_xdc ./xdc/top_level_rtx_spec.xdc
 

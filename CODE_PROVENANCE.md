@@ -9,7 +9,7 @@ All files were written by us during the final project period unless otherwise sp
 
 ## `./`
 
-- `build_rtx.tcl` — tcl file used by Vivado to synth our design. Glob patterns were modified to fit our project structure and the new Nexys board.
+- `tcl/build_rtx.tcl` — tcl file used by Vivado to synth our design. Glob patterns were modified to fit our project structure and the new Nexys board.
 
 ## `xdc/`
 

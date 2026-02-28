@@ -4,7 +4,7 @@
 /*
   Optimizations:
     - Ignore the `valid` pipe and just trust that this module is fully pipelined
-      with 12-cycle delay
+      with 8-cycle delay
 */
 
 /*
@@ -16,7 +16,7 @@
     y: current guess
 
   timing:
-    5 clock cycles
+    4 clock cycles
 */
 module fp_inv_sqrt_stage (
   input wire clk,
@@ -33,33 +33,25 @@ module fp_inv_sqrt_stage (
   // TODO: adjust magic constants
   localparam fp three = FP_THREE;
 
-  fp y_piped5;
+  fp y_piped4;
 
-  pipeline #(.WIDTH(FP_BITS), .DEPTH(5)) x_pipe (.clk(clk), .in(x), .out(x_out));
-  pipeline #(.WIDTH(FP_BITS), .DEPTH(4)) y_pipe (.clk(clk), .in(y), .out(y_piped5));
-  pipeline #(.WIDTH(1), .DEPTH(5)) valid_pipe (.clk(clk), .in(valid_in), .out(valid_out));
+  pipeline #(.WIDTH(FP_BITS), .DEPTH(4)) x_pipe (.clk(clk), .in(x), .out(x_out));
+  pipeline #(.WIDTH(FP_BITS), .DEPTH(3)) y_pipe (.clk(clk), .in(y), .out(y_piped4));
+  pipeline #(.WIDTH(1), .DEPTH(4)) valid_pipe (.clk(clk), .in(valid_in), .out(valid_out));
 
   fp y_sq;              // y * y
   fp y_sq_by_x;         // x * y * y
   fp sub;               // (3 - x * y * y)
   fp frac;              // (3 - x * y * y) / 2
   
-  fp_mul mul_y_sq(.clk(clk), .a(y), .b(y), .prod(y_sq));
-  fp_mul mul_y_sq_by_x(.clk(clk), .a(y_sq), .b(x_pipe.pipe[0]), .prod(y_sq_by_x));
+  fp_mul mul_y_sq(.clk(clk), .rst(rst), .a(y), .b(y), .prod(y_sq));
+  fp_mul mul_y_sq_by_x(.clk(clk), .rst(rst), .a(y_sq), .b(x_pipe.pipe[0]), .prod(y_sq_by_x));
   
-  fp_add add_sub(.clk(clk), .a(three), .b(y_sq_by_x), .is_sub(1'b1), .sum(sub));
+  fp_add add_sub(.clk(clk), .rst(rst), .a(three), .b(y_sq_by_x), .is_sub(1'b1), .sum(sub));
   fp_shift #(.SHIFT_AMT(-1)) div2_frac (.a(sub), .shifted(frac));
   
   // Final answer
-  fp_mul mul_y_next(.clk(clk), .a(frac), .b(y_piped5), .prod(y_next));
-
-  always_ff @(posedge clk) begin
-    // y_sq <= mul_y_sq.prod;
-    // y_sq_by_x <= mul_y_sq_by_x.prod;
-    // sub <= add_sub.sum;
-    // frac <= div2_frac.shifted;
-    // y_next <= mul_y_next.prod;
-  end
+  fp_mul mul_y_next(.clk(clk), .rst(rst), .a(frac), .b(y_piped4), .prod(y_next));
 endmodule
 
 /*

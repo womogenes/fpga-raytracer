@@ -14,6 +14,7 @@ from utils import make_fp, make_fp_vec3, pack_bits, FP_BITS, FP_VEC3_BITS
 
 parser = ArgumentParser()
 parser.add_argument("scene", nargs="?", type=str)
+parser.add_argument("--out-dir", type=Path, default=None)
 
 class Material:
     def __init__(
@@ -58,16 +59,9 @@ class Object:
         self.mat_idx = mat_idx
         self.trig = trig or ((0, 0, 0),) * 3
 
-        # Geometry:
-        # - Spheres use `sphere_center`/`sphere_rad`.
-        # - Trig/parallelogram/plane objects use `trig` in the hardware format:
-        #     [v0, v0v1, v0v2]
-        #   i.e. origin point plus two edge vectors (NOT three absolute vertices).
         if self.obj_type == 0:
             self.trig_norm = (0.0, 0.0, 0.0)
         elif trig_norm is not None:
-            # Some hand-authored scenes already include normals; trust them (but ensure
-            # we store a finite unit-ish vector).
             n = np.asarray(trig_norm, dtype=float)
             n_norm = float(np.linalg.norm(n))
             if (not np.isfinite(n_norm)) or n_norm < 1e-12:
@@ -81,9 +75,6 @@ class Object:
             v0v2 = tri[2]
             n = np.cross(v0v1, v0v2).astype(float)
             n_norm = float(np.linalg.norm(n))
-
-            # If the triangle is degenerate (or contains NaNs), keep a zero normal so
-            # packing doesn't crash; the hardware will effectively treat it as invalid.
             if (not np.isfinite(n_norm)) or n_norm < 1e-12:
                 self.trig_norm = (0.0, 0.0, 0.0)
             else:
@@ -135,7 +126,7 @@ def build_material_dict(scene):
     return mat_bits2idx, mat_name2idx, mat_width
 
 
-def export_scene(scene_file: str):
+def export_scene(scene_file: str, out_dir: Path | None = None):
     """
     Export the JSON description of a scene to the .mem file
         For use in testbenching and initializing BRAM
@@ -160,13 +151,16 @@ def export_scene(scene_file: str):
         obj_objs.append(Object(**obj))
     objs = obj_objs
 
-    with open(str(proj_path / "data" / "scene_buffer.mem"), "w") as fout:
+    out_dir = out_dir or (proj_path / "data")
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    with open(str(out_dir / "scene_buffer.mem"), "w") as fout:
         for obj in objs:
             bits, obj_width = obj.pack_bits()
             n_hex_digits = (obj_width + 3) // 4
             fout.write(hex(bits)[2:].zfill(n_hex_digits) + "\n")
 
-    with open(str(proj_path / "data" / "mat_dict.mem"), "w") as fout:
+    with open(str(out_dir / "mat_dict.mem"), "w") as fout:
         # Sort materials by index
         mats = sorted(mat_bits2idx.items(), key=lambda x: x[1])
         for mat_bits, _ in mats:
@@ -182,4 +176,4 @@ def export_scene(scene_file: str):
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    export_scene(args.scene)
+    export_scene(args.scene, out_dir=args.out_dir)

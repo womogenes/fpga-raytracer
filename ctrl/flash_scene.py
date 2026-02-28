@@ -1,5 +1,3 @@
-# We love python <3
-
 from pathlib import Path
 import os
 import sys
@@ -7,7 +5,7 @@ import sys
 proj_path = Path(__file__).parent.parent
 
 sys.path.append(str(proj_path / "sim"))
-sys.path.append(str(Path(__file__).parent))  # allow local imports even with PYTHONSAFEPATH=1
+sys.path.append(str(Path(__file__).parent))
 from utils import make_fp_vec3, FP_VEC3_BITS
 from make_scene_buffer import Object, build_material_dict
 
@@ -23,13 +21,11 @@ parser.add_argument("scene", nargs="?", type=str)
 
 args = parser.parse_args()
 
-# Communication Parameters
-SERIAL_PORTNAME = os.environ.get("FPGA_SERIAL_PORT") or "/dev/ttyUSB2"  # CHANGE ME
-BAUD = 115200  # Make sure this matches your UART receiver
+SERIAL_PORTNAME = os.environ.get("FPGA_SERIAL_PORT") or "/dev/ttyUSB2"
+BAUD = 115200
 
 
 if __name__ == "__main__":
-    # write_timeout prevents hanging forever if the device disappears mid-stream.
     ser = serial.Serial(SERIAL_PORTNAME, BAUD, write_timeout=5)
     CAM_NUM_BYTES = (FP_VEC3_BITS + 7) // 8
 
@@ -123,20 +119,16 @@ if __name__ == "__main__":
         up=up,
     )
 
-    # Build build mat dict
     mat_bits2idx, mat_name2idx, mat_width = build_material_dict(scene)
 
-    # Flash mat dict
     mats = sorted(mat_bits2idx.items(), key=lambda x: x[1])
     for mat_bits, mat_idx_val in mats:
         set_mat(mat_idx_val, mat_bits, mat_width)
 
-    # Flash objects
     objs = scene["objects"]
     print(f"Flashing {len(objs)} objects")
 
     for idx, obj in enumerate(objs):
-        # Look up material index in dictionary
         obj["mat_idx"] = mat_name2idx[obj["material"]]
         del obj["material"]
         set_obj(idx, Object(**obj))
@@ -145,7 +137,6 @@ if __name__ == "__main__":
 
     set_max_bounces(int(scene["max_bounces"]))
 
-    # Important on macOS: don't exit until bytes drain
     ser.flush()
     time.sleep(0.5)
     ser.close()

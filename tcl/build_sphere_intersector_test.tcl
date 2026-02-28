@@ -1,22 +1,12 @@
 set_param general.maxThreads 16
 
 set partNum xc7k325t-ffg900-2
-set dutVariant [lindex $argv 0]
-if {$dutVariant eq ""} {
-    set dutVariant "fp_add"
+set runTag [lindex $argv 0]
+if {$runTag eq ""} {
+    set runTag "latest"
 }
 
-if {$dutVariant eq "fp_add"} {
-    set dutDefine ""
-} elseif {$dutVariant eq "fp_add_one_cycle_baseline"} {
-    set dutDefine "FP_ADD_ONE_CYCLE_BASELINE"
-} elseif {$dutVariant eq "fp_add_one_cycle_opt"} {
-    set dutDefine "FP_ADD_ONE_CYCLE_OPT"
-} else {
-    error "Unsupported DUT variant: $dutVariant"
-}
-
-set outputDir [file join obj_test $dutVariant]
+set outputDir [file join obj_sphere_intersector $runTag]
 file mkdir $outputDir
 
 set sources_sv [concat \
@@ -24,17 +14,10 @@ set sources_sv [concat \
     [glob ./hdl/types/*.sv] \
     [glob ./hdl/pipeline.sv] \
     [glob ./hdl/clock/*.sv] \
-    [glob ./hdl/math/clz.sv] \
-    [glob ./hdl/math/fp_add.sv] \
-    [glob ./hdl/tb/fp_add/*.sv] \
-    [glob ./hdl/top_level_test.sv] \
+    [glob ./hdl/math/*.sv] \
+    [glob ./hdl/tb/top_level_test_sphere_intersector.sv] \
 ]
-
-if {$dutDefine eq ""} {
-    read_verilog -sv $sources_sv
-} else {
-    read_verilog -sv -define $dutDefine $sources_sv
-}
+read_verilog -sv $sources_sv
 
 set sources_v [concat \
     [glob -nocomplain ./hdl/hdmi/*.v] \

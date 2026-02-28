@@ -23,7 +23,7 @@ If you want to test this for yourself in hardware:
 2. Install Xilinx Vivado (nontrivial; will add instructions later)
 3. Synthesize with
    ```
-   time vivado -mode batch -source build_rtx.tcl -nojournal -log "obj/vivado.log"
+   time vivado -mode batch -source tcl/build_rtx.tcl -nojournal -log "obj/vivado.log"
    ```
    or using the Vivado GUI (though I prefer the command-line version). When synthesizing for the Genesys 2 board, the part is `xc7k325t-ffg900-2`. If running Vivado in Docker, we currently need to run
    ```sh
@@ -52,9 +52,7 @@ If you want to test this for yourself in hardware:
 
 If you don't have the Genesys 2, a comparable board will work provided it has enough logic slices, HDMI output, and sufficient DRAM. You will need to modify `xdc/top_level.xdc` with the right pinout labels. e.g. for the Nexys Video, see `https://github.com/Digilent/digilent-xdc/blob/master/Nexys-Video-Master.xdc`.
 
-## Migrating from Nexys Video to Genesys 2
-
-Codex helped me migrate everything from the Nexys Video to the Genesys 2 board. Here's what it said about what needed to change:
+## Genesys 2 migration notes
 
 - Clocking:
   - Change `top_level` to take `sysclk_p/sysclk_n` instead of a single-ended `clk_100mhz`.

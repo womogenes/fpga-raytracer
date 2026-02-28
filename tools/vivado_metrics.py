@@ -16,6 +16,7 @@ CONTAINER_VIVADO_CANDIDATES = (
     "/opt/Xilinx/2025.1/Vivado/bin/vivado",
 )
 LD_PRELOAD = "/lib/x86_64-linux-gnu/libudev.so.1"
+CONTAINER_LOCALE = "C.utf8"
 
 
 @dataclass
@@ -125,8 +126,9 @@ def compute_vivado_metrics() -> VivadoMetrics:
 
     batch_cmd = (
         f"cd {container_project_dir} && "
+        f"export LANG={CONTAINER_LOCALE} LC_ALL={CONTAINER_LOCALE} && "
         f"export LD_PRELOAD={LD_PRELOAD} && "
-        f"{container_vivado} -mode batch -source build_rtx.tcl -nojournal -log obj_rtx/vivado.log"
+        f"{container_vivado} -mode batch -source tcl/build_rtx.tcl -nojournal -log obj_rtx/vivado.log"
     )
     _run(["docker", "exec", CONTAINER_NAME, "bash", "-lc", batch_cmd])
 

@@ -35,7 +35,6 @@ sys.path.append(str(Path(__file__).resolve().parent.parent.parent / "ctrl"))
 from utils import make_fp_vec3, pack_bits, FP_BITS, FP_VEC3_BITS
 from make_scene_buffer import export_scene
 
-# MULTIPROCESSING GO BRRR
 from multiprocessing import Pool
 
 parser = ArgumentParser()
@@ -45,6 +44,8 @@ parser.add_argument("--frames", type=int, default=1)
 parser.add_argument("--waves", action=BooleanOptionalAction, default=False)
 parser.add_argument("--json", type=str, default=None)
 parser.add_argument("--seed", type=lambda value: int(value, 0), default=0x123456789ABCDEF123456789)
+parser.add_argument("--data-dir", type=Path, default=None)
+parser.add_argument("--output-prefix", type=Path, default=None)
 
 args = parser.parse_args()
 WAVES = args.waves
@@ -66,9 +67,11 @@ else:
     N_FRAMES = args.frames
     BASE_SEED = args.seed
 
-    # Parent caller, initialize scene params
     if args.json:
-        export_scene(args.json)
+        data_dir = args.data_dir or Path(os.environ.get("RTX_DATA_DIR", Path(__file__).resolve().parent.parent.parent / "data"))
+        data_dir.mkdir(parents=True, exist_ok=True)
+        os.environ["RTX_DATA_DIR"] = str(data_dir)
+        export_scene(args.json, out_dir=data_dir)
         with open(args.json) as fin:
             data = json.load(fin)
             CAM_DATA = data["camera"]
@@ -98,22 +101,40 @@ NUM_CHUNKS_ACTUAL = len(CHUNK_RANGES)
 test_file = os.path.basename(__file__).replace(".py", "")
 
 proj_path = Path(__file__).resolve().parent.parent.parent
-SCENE_BUF_MEM_PATH = str(proj_path / "data" / "scene_buffer.mem")
-MAT_DICT_MEM_PATH = str(proj_path / "data" / "mat_dict.mem")
+data_dir = args.data_dir or Path(os.environ.get("RTX_DATA_DIR", proj_path / "data"))
+SCENE_BUF_MEM_PATH = str(data_dir / "scene_buffer.mem")
+MAT_DICT_MEM_PATH = str(data_dir / "mat_dict.mem")
 
 with open(SCENE_BUF_MEM_PATH, "r") as fin:
     NUM_OBJS = fin.read().strip().count("\n") + 1
 
-# Location to store chunk .npy files
-RUN_TAG = f"{WIDTH}x{HEIGHT}_f{N_FRAMES}_seed{BASE_SEED:024x}"
-CHUNKS_OUT_DIR = proj_path / "sim" / "sim_build" / "rtx_parallel" / "chunks" / RUN_TAG
+# Scope simulator scratch paths to this specific invocation so concurrent scene
+# renders cannot overwrite each other's chunk outputs or copied .mem files.
+run_instance_key_parts = [
+    str(Path(args.json).resolve()) if args.json else "<no-scene>",
+    str(data_dir.resolve()),
+    str(args.output_prefix.resolve()) if args.output_prefix else "<no-output-prefix>",
+    f"{WIDTH}x{HEIGHT}",
+    f"f{N_FRAMES}",
+    f"seed{BASE_SEED:024x}",
+]
+default_run_instance_tag = hashlib.sha1("::".join(run_instance_key_parts).encode()).hexdigest()[:16]
+RUN_INSTANCE_TAG = os.environ.get("RTX_RUN_INSTANCE_TAG", default_run_instance_tag)
+RUN_TAG = f"{WIDTH}x{HEIGHT}_f{N_FRAMES}_seed{BASE_SEED:024x}_{RUN_INSTANCE_TAG}"
+CHUNKS_OUT_DIR = Path(os.environ.get(
+    "RTX_CHUNKS_OUT_DIR",
+    proj_path / "sim" / "sim_build" / "rtx_parallel" / "chunks" / RUN_TAG,
+))
 if "PIXEL_START_IDX" not in os.environ:
     shutil.rmtree(CHUNKS_OUT_DIR, ignore_errors=True)
 os.makedirs(CHUNKS_OUT_DIR, exist_ok=True)
 
-# Single shared build directory for all workers
-BUILD_DIR_TAG = hashlib.sha1(str(proj_path).encode()).hexdigest()[:10]
-BUILD_DIR = proj_path / "sim" / "sim_build" / "rtx_parallel" / f"verilator_{WIDTH}x{HEIGHT}_{BUILD_DIR_TAG}"
+# Give each render invocation its own build directory because the copied scene
+# and material .mem files under build/data are scene-specific.
+BUILD_DIR = Path(os.environ.get(
+    "RTX_BUILD_DIR",
+    proj_path / "sim" / "sim_build" / "rtx_parallel" / f"verilator_{WIDTH}x{HEIGHT}_{RUN_INSTANCE_TAG}",
+))
 os.makedirs(BUILD_DIR, exist_ok=True)
 
 # Common configuration for Verilator build and test
@@ -189,7 +210,6 @@ async def test_module(dut):
             ((color8 >> 11) & 0b11111) << 3
         )
 
-    # Extract pixel_start_idx and pixel_end_idx from environment vars
     pixel_start_idx = int(os.environ["PIXEL_START_IDX"])
     pixel_end_idx = int(os.environ["PIXEL_END_IDX"])
     n_pixels = pixel_end_idx - pixel_start_idx + 1
@@ -275,6 +295,9 @@ def run_test_worker(pixel_start_idx: int, pixel_end_idx: int, chunk_idx: int):
         os.environ["CAM_DATA"] = json.dumps(CAM_DATA)
         os.environ["MAX_BOUNCES"] = str(MAX_BOUNCES)
     os.environ["TEST_SEED"] = hex(BASE_SEED)
+    os.environ["RTX_RUN_INSTANCE_TAG"] = RUN_INSTANCE_TAG
+    os.environ["RTX_CHUNKS_OUT_DIR"] = str(CHUNKS_OUT_DIR)
+    os.environ["RTX_BUILD_DIR"] = str(BUILD_DIR)
 
     runner = get_runner(SIM)
     runner.build(
@@ -288,7 +311,6 @@ def run_test_worker(pixel_start_idx: int, pixel_end_idx: int, chunk_idx: int):
         build_dir=BUILD_DIR,
     )
 
-    # Now run test
     runner.test(
         hdl_toplevel=HDL_TOPLEVEL,
         test_module=test_file,
@@ -327,7 +349,7 @@ if __name__ == "__main__":
     print("Starting parallel render...")
     render_start = time.time()
     with Pool(processes=CPU_COUNT) as pool:
-        results = pool.map(worker, tasks)
+        pool.map(worker, tasks)
     render_time = time.time() - render_start
 
     # Gather chunks and combine
@@ -352,7 +374,9 @@ if __name__ == "__main__":
 
     pixels_all = np.concatenate(pixel_chunks)
     img = Image.fromarray(pixels_all.reshape((HEIGHT, WIDTH, 3)).astype("uint8"))
-    output_file = f"test_rtx_{WIDTH}x{HEIGHT}_f{N_FRAMES}.png"
+    output_prefix = args.output_prefix or Path(f"test_rtx_{WIDTH}x{HEIGHT}_f{N_FRAMES}")
+    output_file = Path(output_prefix).with_suffix(".png")
+    output_file.parent.mkdir(parents=True, exist_ok=True)
     img.save(output_file)
     metrics = {
         "frames": N_FRAMES,
@@ -363,7 +387,7 @@ if __name__ == "__main__":
         "cycles_per_pixel_per_frame": total_cycles / total_pixel_samples,
         "cycles_per_output_pixel_all_frames": total_cycles / total_output_pixels,
     }
-    metrics_path = Path(output_file).with_suffix(".metrics.json")
+    metrics_path = output_file.with_suffix(".metrics.json")
     with open(metrics_path, "w") as fout:
         json.dump(metrics, fout, indent=2)
 
