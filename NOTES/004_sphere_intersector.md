@@ -1,6 +1,6 @@
-# Sphere Intersector Latency Reduction
+# Sphere intersector latency reduction
 
-## Final Change
+## Final change
 
 Accepted a radical sphere-only fast path and reduced `SPHERE_INTX_DELAY` from `29` to `20` cycles to match `TRIG_INTX_DELAY`.
 
@@ -46,7 +46,7 @@ Files:
 - `hdl/top_level_test_sphere_intersector.sv`
 - `build_sphere_intersector_test.tcl`
 
-## Important Bug Found During Bringup
+## Important bug found during bringup
 
 The first fast solver attempt was mathematically wrong in a streaming context even though the single-operation algebra looked correct.
 
@@ -61,7 +61,7 @@ Fix:
 
 That fix preserved the intended `12`-cycle fast solver latency and made the solver regression pass.
 
-## Downstream Contract Change
+## Downstream contract change
 
 `ray_intersector` now sees `SPHERE_INTX_DELAY == TRIG_INTX_DELAY == 20`.
 
@@ -74,7 +74,7 @@ Implemented:
 
 ## Verification
 
-### Module Tests
+### Module tests
 
 Passed:
 
@@ -94,7 +94,7 @@ Test-harness fixes made during verification:
   - added missing `hdl/rng/prng8.sv` to the source list
   - fixed cocotb module import path
 
-### Isolated Sphere Synthesis
+### Isolated sphere synthesis
 
 Command shape:
 
@@ -109,7 +109,7 @@ Result:
 - `Slice LUTs = 2870`
 - timing met
 
-### Whole Design Synthesis
+### Whole design synthesis
 
 Command:
 
@@ -130,7 +130,7 @@ Critical path note:
 - the top path is not in `fp_add_fast`, `quadratic_solver_fast`, `sphere_intersector`, or `ray_intersector`
 - the accepted 20-cycle sphere path did not become the timing bottleneck
 
-## Render Verification
+## Render verification
 
 Render verifier note:
 
@@ -176,7 +176,7 @@ Speedup:
 
 - `1.9338629663524707%`
 
-## Final Speedup
+## Final speedup
 
 - `canonical_balls`: `14.584357772746257%`
 - `knight`: `1.9338629663524707%`

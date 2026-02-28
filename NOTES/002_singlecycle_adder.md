@@ -49,22 +49,16 @@ Clean up after you finish.
 
 ### Focused fp_add bring-up
 
-- Restored the focused synthesis harness for adder experiments:
+- Added a focused synthesis harness for the production adder:
   - `hdl/top_level_test.sv`
   - `build_test.tcl`
-  - `hdl/tb/fp_add/fp_add_one_cycle_baseline.sv`
-  - `hdl/tb/fp_add/fp_add_one_cycle_opt.sv`
 - Hardened `sim/math/fp_ops/test_fp_add.py` so it can run from the repo root and acts as a real regression.
-- Added baseline-compare infrastructure for math modules:
-  - `sim/math/fp_ops/test_fp_add_vs_baseline.py`
-  - `sim/math/fp_ops/test_fp_inv_sqrt_vs_baseline.py`
-  - `sim/math/fp_ops/test_fp_vec3_dot_vs_baseline.py`
-  - `sim/math/fp_ops/test_fp_vec3_normalize_vs_baseline.py`
+- Temporary baseline-compare wrappers and tests were used during bring-up and removed during cleanup once the regular math, RTX, and render regressions were in place.
 
 ### Focused adder timing result
 
 - Verified the isolated one-cycle adder at 100 MHz.
-- Focused report:
+- Historical focused report used to qualify the one-cycle candidate:
   - `obj_test/fp_add_one_cycle_baseline/post_route_timing_summary.rpt`
 - Result:
   - `WNS = +1.126 ns`
@@ -105,6 +99,14 @@ Clean up after you finish.
   - kept the measured merged `RAY_INTERSECTOR_OVERHEAD = 1`
 - Recorded in follow-up commit:
   - `5d42d80 Simplify ray_intersector bookkeeping`
+
+### Cleanup
+
+- Removed branch-only adder experiment variants from the focused synthesis harness and kept only the production `fp_add` target.
+- `build_test.tcl` now writes the focused production build under `obj_test/fp_add/`.
+- Removed the temporary baseline-compat compare wrappers and compare benches under `sim/math/fp_ops/`.
+- Simplified `hdl/top_level_test.sv` and `xdc/top_level_test.xdc` so the focused synth top only carries the clock, reset button, and LED checksum outputs.
+- Restored structural section comments in `hdl/rtx/ray_intersector.sv`.
 
 ### Final verified module regressions
 

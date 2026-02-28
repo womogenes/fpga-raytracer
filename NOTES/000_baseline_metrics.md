@@ -1,4 +1,4 @@
-# Baseline Metrics
+# Baseline metrics
 
 Using the `summary.json` entries under `metrics/`, one row per scene. For scenes with multiple summaries, this table uses the comparable baseline run with `scale=2.0` and `frames=4`.
 

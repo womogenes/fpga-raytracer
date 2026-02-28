@@ -5,8 +5,9 @@ module ray_intersector (
   input wire rst,
   input fp_vec3 ray_origin,
   input fp_vec3 ray_dir,
-  input wire ray_valid,
+  input wire ray_valid,  // single-cycle trigger
 
+  // Running values
   output logic [7:0] hit_mat_idx,
   output fp_vec3 hit_pos,
   output fp_vec3 hit_normal,
@@ -14,9 +15,11 @@ module ray_intersector (
   output logic hit_any,
   output logic hit_valid,
 
+  // Scene buffer interface
   input wire [$clog2(MAX_NUM_OBJS)-1:0] num_objs,
   input object obj
 );
+  // Track which object result is first or last for the current ray.
   logic [$clog2(MAX_NUM_OBJS + 1)-1:0] post_obj_count;
   logic first_result;
   logic last_obj;
@@ -51,6 +54,7 @@ module ray_intersector (
   fp trig_intx_hit_dist;
   fp_vec3 trig_intx_hit_norm;
 
+  // Pipelined hit material for reflection.
   logic [7:0] obj_intx_mat_idx;
   pipeline #(
     .WIDTH(8),
@@ -61,6 +65,7 @@ module ray_intersector (
     .out(obj_intx_mat_idx)
   );
 
+  // Pipelined object type for hit reduction.
   logic [1:0] obj_type_piped;
   pipeline #(
     .WIDTH(2),
@@ -74,6 +79,7 @@ module ray_intersector (
   sphere sphere_cast;
   assign sphere_cast = obj.stuff;
 
+  // Sphere and triangle intersectors run in parallel on the current object.
   sphere_intersector sphere_intx (
     .clk(clk),
     .rst(rst),
@@ -192,7 +198,6 @@ module ray_intersector (
       hit_valid <= last_obj;
     end
   end
-
 endmodule
 
 `default_nettype wire
