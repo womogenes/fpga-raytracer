@@ -32,7 +32,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", default="ctrl/scenes/canonical_balls.json")
     parser.add_argument("--scale", type=float, default=2.0)
-    parser.add_argument("--frames", type=int, default=1)
+    parser.add_argument("--frames", type=int, default=4)
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--chunks", type=int, default=None)
     parser.add_argument("--blur-radius", type=float, default=2.0)

@@ -1,6 +1,6 @@
 ## Instructions
 
-(these instructions are also in `fpga-raytracer/NOTES/002_singlecycle_adder.md` should need to refer back to them at any point)
+(these instructions are also in `fpga-raytracer/NOTES/002_singlecycle_adder.md` should you need to refer back to them at any point)
 
 Make a new git worktree for this project.
 
