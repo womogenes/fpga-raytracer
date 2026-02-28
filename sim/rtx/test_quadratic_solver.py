@@ -105,16 +105,12 @@ def runner():
         proj_path / "hdl" / "math" / "clz.sv",
         proj_path / "hdl" / "math" / "fp_shift.sv",
         proj_path / "hdl" / "math" / "fp_add.sv",
-        proj_path / "hdl" / "math" / "fp_add_fast.sv",
         proj_path / "hdl" / "math" / "fp_mul.sv",
         proj_path / "hdl" / "math" / "fp_inv_sqrt.sv",
-        proj_path / "hdl" / "math" / "fp_inv_sqrt_fast.sv",
         proj_path / "hdl" / "math" / "fp_sqrt.sv",
-        proj_path / "hdl" / "math" / "fp_sqrt_fast.sv",
         proj_path / "hdl" / "math" / "quadratic_solver.sv",
-        proj_path / "hdl" / "math" / "quadratic_solver_fast.sv",
     ]
-    hdl_toplevel = "quadratic_solver_fast"
+    hdl_toplevel = "quadratic_solver"
     test_module = ".".join(Path(__file__).resolve().with_suffix("").relative_to(proj_path).parts)
 
     runner = get_runner(sim)

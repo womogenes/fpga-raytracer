@@ -13,18 +13,22 @@ The accepted design keeps the same sphere-intersection equation:
 
 What changed is the local implementation of the expensive building blocks:
 
-- `fp_vec3_add_fast` for `L`, `hit_pos`, and `hit_norm_prenorm`
-- new `fp_vec3_dot_fast` for the two sphere dot products
-- new `fp_inv_sqrt_fast`
-- new `fp_sqrt_fast`
-- new `quadratic_solver_fast`
+- `fp_vec3_add` for `L`, `hit_pos`, and `hit_norm_prenorm`
+- `fp_vec3_dot` for the two sphere dot products
+- `fp_inv_sqrt`
+- `fp_sqrt`
+- `quadratic_solver`
+
+The first accepted version used temporary `*_fast` wrapper modules for these blocks.
+Those wrappers were later folded back into the canonical module names during cleanup
+so the repo keeps one implementation per primitive.
 
 The accepted sphere timing is:
 
 - `L` add: 1 cycle
 - two fast dots plus radius alignment: 4 cycles
 - `b` / `c` formation: 1 more cycle
-- `quadratic_solver_fast`: 12 cycles
+- `quadratic_solver`: 12 cycles
 - `ray_dir * x0`: 1 cycle
 - fast geometry add: 1 cycle
 - final `hit_pos` / `hit_norm` alignment: 1 cycle
@@ -36,12 +40,11 @@ Total:
 Files:
 
 - `hdl/math/sphere_intersector.sv`
-- `hdl/math/fp_add_fast.sv`
-- `hdl/math/fp_vec3_add_fast.sv`
-- `hdl/math/fp_vec3_dot_fast.sv`
-- `hdl/math/fp_inv_sqrt_fast.sv`
-- `hdl/math/fp_sqrt_fast.sv`
-- `hdl/math/quadratic_solver_fast.sv`
+- `hdl/math/fp_add.sv`
+- `hdl/math/fp_vec3_ops.sv`
+- `hdl/math/fp_inv_sqrt.sv`
+- `hdl/math/fp_sqrt.sv`
+- `hdl/math/quadratic_solver.sv`
 - `hdl/rtx/ray_intersector.sv`
 - `hdl/top_level_test_sphere_intersector.sv`
 - `build_sphere_intersector_test.tcl`
@@ -52,7 +55,7 @@ The first fast solver attempt was mathematically wrong in a streaming context ev
 
 Root cause:
 
-- I removed the register on `four_c` inside `quadratic_solver_fast`
+- I removed the register on `four_c` inside `quadratic_solver`
 - that mixed `b_sq[n]` with `c[n+1]` under continuous input streaming
 
 Fix:
@@ -127,7 +130,7 @@ Result:
 Critical path note:
 
 - the top post-route setup path is still in `highdef_fb/rtx_data_fifo/xpm_fifo_axis_inst/xpm_fifo_base_inst/gen_cdc_pntr.rd_pntr_cdc_inst`
-- the top path is not in `fp_add_fast`, `quadratic_solver_fast`, `sphere_intersector`, or `ray_intersector`
+- the top path is not in `fp_add`, `quadratic_solver`, `sphere_intersector`, or `ray_intersector`
 - the accepted 20-cycle sphere path did not become the timing bottleneck
 
 ## Render verification

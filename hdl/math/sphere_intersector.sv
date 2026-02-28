@@ -50,10 +50,10 @@ module sphere_intersector (
     .out(ray_origin_piped)
   );
 
-  fp_vec3_add_fast add_L(.clk(clk), .rst(rst), .v(ray_origin), .w(sphere_center), .is_sub(1'b1), .sum(L));
+  fp_vec3_add add_L(.clk(clk), .rst(rst), .v(ray_origin), .w(sphere_center), .is_sub(1'b1), .sum(L));
 
-  fp_vec3_dot_fast dot_ray_dir_dot_L(.clk(clk), .rst(rst), .v(ray_dir_pipe.pipe[0]), .w(L), .dot(ray_dir_dot_L));
-  fp_vec3_dot_fast dot_L_mag_sq(.clk(clk), .rst(rst), .v(L), .w(L), .dot(L_mag_sq));
+  fp_vec3_dot dot_ray_dir_dot_L(.clk(clk), .rst(rst), .v(ray_dir_pipe.pipe[0]), .w(L), .dot(ray_dir_dot_L));
+  fp_vec3_dot dot_L_mag_sq(.clk(clk), .rst(rst), .v(L), .w(L), .dot(L_mag_sq));
   pipeline #(.WIDTH(FP_BITS), .DEPTH(4)) sphere_rad_pipe (
     .clk(clk),
     .in(sphere_rad_sq),
@@ -62,9 +62,9 @@ module sphere_intersector (
 
   fp_shift #(.SHIFT_AMT(1)) shift_b (.a(ray_dir_dot_L), .shifted(b));
   pipeline #(.WIDTH(FP_BITS), .DEPTH(1)) b_pipe (.clk(clk), .in(b), .out(b_piped));
-  fp_add_fast add_c(.clk(clk), .rst(rst), .a(L_mag_sq), .b(sphere_rad_sq_piped), .is_sub(1'b1), .sum(c));
+  fp_add add_c(.clk(clk), .rst(rst), .a(L_mag_sq), .b(sphere_rad_sq_piped), .is_sub(1'b1), .sum(c));
 
-  quadratic_solver_fast qr_solver(.clk(clk), .rst(rst), .b(b_piped), .c(c), .x0(x0));
+  quadratic_solver qr_solver(.clk(clk), .rst(rst), .b(b_piped), .c(c), .x0(x0));
 
   fp_vec3_scale scale_ray_dir(.clk(clk), .rst(rst), .v(ray_dir_piped), .s(x0), .scaled(ray_dir_by_x0));
   pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(QR_STAGE_DELAY)) L_pipe (
@@ -73,8 +73,8 @@ module sphere_intersector (
     .out(L_piped)
   );
 
-  fp_vec3_add_fast add_hit_pos(.clk(clk), .rst(rst), .v(ray_dir_by_x0), .w(ray_origin_piped), .is_sub(1'b0), .sum(hit_pos_prepiped));
-  fp_vec3_add_fast add_hit_norm_prenorm(.clk(clk), .rst(rst), .v(ray_dir_by_x0), .w(L_piped), .is_sub(1'b0), .sum(hit_norm_prenorm));
+  fp_vec3_add add_hit_pos(.clk(clk), .rst(rst), .v(ray_dir_by_x0), .w(ray_origin_piped), .is_sub(1'b0), .sum(hit_pos_prepiped));
+  fp_vec3_add add_hit_norm_prenorm(.clk(clk), .rst(rst), .v(ray_dir_by_x0), .w(L_piped), .is_sub(1'b0), .sum(hit_norm_prenorm));
   pipeline #(.WIDTH(FP_BITS), .DEPTH(QR_STAGE_DELAY + 2)) sphere_rad_inv_pipe (
     .clk(clk),
     .in(sphere_rad_inv),

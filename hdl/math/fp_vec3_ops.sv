@@ -88,16 +88,16 @@ module fp_vec3_dot (
   fp_vec3 prod;
   fp sum_xy, z_piped2;
 
-  fp_vec3_mul mul(.clk(clk), .v(v), .w(w), .prod(prod));
+  fp_vec3_mul mul(.clk(clk), .rst(rst), .v(v), .w(w), .prod(prod));
 
   // Add the elementwise products
-  fp_add add_xy(.clk(clk), .a(prod.x), .b(prod.y), .is_sub(1'b0), .sum(sum_xy));
+  fp_add add_xy(.clk(clk), .rst(rst), .a(prod.x), .b(prod.y), .is_sub(1'b0), .sum(sum_xy));
 
   // Store z-value because pipeline timing
   pipeline #(.WIDTH(FP_BITS), .DEPTH(1)) z_pipe (.clk(clk), .in(prod.z), .out(z_piped2));
 
   // Final add
-  fp_add add_xyz(.clk(clk), .a(sum_xy), .b(z_piped2), .is_sub(1'b0), .sum(dot));
+  fp_add add_xyz(.clk(clk), .rst(rst), .a(sum_xy), .b(z_piped2), .is_sub(1'b0), .sum(dot));
 endmodule
 
 /*
@@ -144,7 +144,7 @@ module fp_vec3_normalize (
   // Find |v * v|, i.e. x^2 + y^2 + z^2
   // VEC3_DOT_DELAY cycles
   fp mag_sq;
-  fp_vec3_dot dot_mag_sq(.clk(clk), .v(v), .w(v), .dot(mag_sq));
+  fp_vec3_dot dot_mag_sq(.clk(clk), .rst(rst), .v(v), .w(v), .dot(mag_sq));
 
   // Find 1/mag(a)
   // INV_SQRT_DELAY cycles
@@ -166,7 +166,7 @@ module fp_vec3_normalize (
 
   // Scaling portion
   // 1 cycle
-  fp_vec3_scale scale_a_norm(.clk(clk), .v(v_piped), .s(mag_inv), .scaled(normed));
+  fp_vec3_scale scale_a_norm(.clk(clk), .rst(rst), .v(v_piped), .s(mag_inv), .scaled(normed));
 endmodule
 
 /*
