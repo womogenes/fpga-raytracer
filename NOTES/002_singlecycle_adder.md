@@ -50,8 +50,8 @@ Clean up after you finish.
 ### Focused fp_add bring-up
 
 - Added a focused synthesis harness for the production adder:
-  - `hdl/top_level_test.sv`
-  - `build_test.tcl`
+  - `hdl/tb/top_level_test.sv`
+  - `tcl/build_test.tcl`
 - Hardened `sim/math/fp_ops/test_fp_add.py` so it can run from the repo root and acts as a real regression.
 - Temporary baseline-compare wrappers and tests were used during bring-up and removed during cleanup once the regular math, RTX, and render regressions were in place.
 
@@ -103,10 +103,10 @@ Clean up after you finish.
 ### Cleanup
 
 - Removed branch-only adder experiment variants from the focused synthesis harness and kept only the production `fp_add` target.
-- `build_test.tcl` now writes the focused production build under `obj_test/fp_add/`.
+- `tcl/build_test.tcl` now writes the focused production build under `obj_test/fp_add/`.
 - Removed the temporary baseline-compat compare wrappers and compare benches under `sim/math/fp_ops/`.
 - Folded the temporary sphere-local `*_fast` math wrappers back into the canonical math modules so the repo keeps one implementation per primitive.
-- Simplified `hdl/top_level_test.sv` and `xdc/top_level_test.xdc` so the focused synth top only carries the clock, reset button, and LED checksum outputs.
+- Simplified `hdl/tb/top_level_test.sv` and `xdc/top_level_test.xdc` so the focused synth top only carries the clock, reset button, and LED checksum outputs.
 - Restored structural section comments in `hdl/rtx/ray_intersector.sv`.
 
 ### Final verified module regressions

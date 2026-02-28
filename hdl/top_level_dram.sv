@@ -3,7 +3,7 @@
 `define FPATH(X) `"X`"
 
 // Incremental bring-up "Step 0":
-// `top_level_dram.sv` is intentionally identical to `top_level_test.sv`.
+// `top_level_dram.sv` is intentionally identical to `hdl/tb/top_level_test.sv`.
 // No DDR3 ports, no DDR3 clocks, no framebuffer. Just a known-good HDMI solid fill.
 module top_level (
   // Genesys 2 provides a 200MHz differential system clock (SYSCLK_P/N).

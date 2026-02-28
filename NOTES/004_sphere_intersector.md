@@ -46,8 +46,8 @@ Files:
 - `hdl/math/fp_sqrt.sv`
 - `hdl/math/quadratic_solver.sv`
 - `hdl/rtx/ray_intersector.sv`
-- `hdl/top_level_test_sphere_intersector.sv`
-- `build_sphere_intersector_test.tcl`
+- `hdl/tb/top_level_test_sphere_intersector.sv`
+- `tcl/build_sphere_intersector_test.tcl`
 
 ## Important bug found during bringup
 
@@ -101,7 +101,7 @@ Test-harness fixes made during verification:
 
 Command shape:
 
-- `vivado -mode batch -source build_sphere_intersector_test.tcl -tclargs radical20`
+- `vivado -mode batch -source tcl/build_sphere_intersector_test.tcl -tclargs radical20`
 
 Result:
 

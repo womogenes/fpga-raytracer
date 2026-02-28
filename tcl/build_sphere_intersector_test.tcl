@@ -1,24 +1,30 @@
 set_param general.maxThreads 16
 
 set partNum xc7k325t-ffg900-2
-set dutTarget [lindex $argv 0]
-if {$dutTarget ne "" && $dutTarget ne "fp_add"} {
-    error "build_test.tcl now only supports fp_add"
+set runTag [lindex $argv 0]
+if {$runTag eq ""} {
+    set runTag "latest"
 }
 
-set outputDir [file join obj_test fp_add]
+set outputDir [file join obj_sphere_intersector $runTag]
 file mkdir $outputDir
 
 set sources_sv [concat \
     [glob ./hdl/constants.sv] \
     [glob ./hdl/types/*.sv] \
+    [glob ./hdl/pipeline.sv] \
     [glob ./hdl/clock/*.sv] \
-    [glob ./hdl/math/clz.sv] \
-    [glob ./hdl/math/fp_add.sv] \
-    [glob ./hdl/top_level_test.sv] \
+    [glob ./hdl/math/*.sv] \
+    [glob ./hdl/tb/top_level_test_sphere_intersector.sv] \
 ]
-
 read_verilog -sv $sources_sv
+
+set sources_v [concat \
+    [glob -nocomplain ./hdl/hdmi/*.v] \
+]
+if {[llength $sources_v] > 0} {
+    read_verilog $sources_v
+}
 
 read_xdc ./xdc/top_level_test.xdc
 set_part $partNum

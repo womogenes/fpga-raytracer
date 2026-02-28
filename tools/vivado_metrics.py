@@ -128,7 +128,7 @@ def compute_vivado_metrics() -> VivadoMetrics:
         f"cd {container_project_dir} && "
         f"export LANG={CONTAINER_LOCALE} LC_ALL={CONTAINER_LOCALE} && "
         f"export LD_PRELOAD={LD_PRELOAD} && "
-        f"{container_vivado} -mode batch -source build_rtx.tcl -nojournal -log obj_rtx/vivado.log"
+        f"{container_vivado} -mode batch -source tcl/build_rtx.tcl -nojournal -log obj_rtx/vivado.log"
     )
     _run(["docker", "exec", CONTAINER_NAME, "bash", "-lc", batch_cmd])
 

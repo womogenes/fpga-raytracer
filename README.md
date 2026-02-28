@@ -23,7 +23,7 @@ If you want to test this for yourself in hardware:
 2. Install Xilinx Vivado (nontrivial; will add instructions later)
 3. Synthesize with
    ```
-   time vivado -mode batch -source build_rtx.tcl -nojournal -log "obj/vivado.log"
+   time vivado -mode batch -source tcl/build_rtx.tcl -nojournal -log "obj/vivado.log"
    ```
    or using the Vivado GUI (though I prefer the command-line version). When synthesizing for the Genesys 2 board, the part is `xc7k325t-ffg900-2`. If running Vivado in Docker, we currently need to run
    ```sh
