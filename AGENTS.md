@@ -20,4 +20,5 @@ Use the render metrics JSON to read `total_cycles` and `cycles_per_pixel_per_fra
 
 ## Notes
 
-When writing docs, only ever use sentence case for headers.
+- When writing docs, only ever use sentence case for headers.
+- Be very careful about pipelining and retiming. Sometimes when you modify stuff, other signals change when they arrive. You may have to update hardcoded delay values.

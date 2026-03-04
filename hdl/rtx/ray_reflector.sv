@@ -1,8 +1,5 @@
 `default_nettype none
 
-// Compute reflected ray properties after bouncing off of object.
-// This version is fixed-latency and accepts a new hit every cycle.
-
 module ray_reflector (
   input wire clk,
   input wire rst,
@@ -30,7 +27,7 @@ module ray_reflector (
   input wire [95:0] lfsr_seed
 );
   localparam integer REFLECT_DONE_DELAY = 37;
-  localparam integer TRUE_MAT_ONE_SUB_ALIGN_DELAY = 2 - FP_ADD_DELAY;
+  localparam integer NEW_DIR_DELAY = 29;
 
   pipeline #(.WIDTH(1), .DEPTH(REFLECT_DONE_DELAY)) done_pipe (
     .clk(clk),
@@ -38,7 +35,6 @@ module ray_reflector (
     .out(reflect_done)
   );
 
-  // ===== BRANCH 0: specular_amt =====
   material hit_mat;
 
   assign mat_dict_idx = hit_mat_idx;
@@ -61,7 +57,6 @@ module ray_reflector (
     end
   end
 
-  // Calculate (1 - specular_amt)
   fp one_sub_spec_amt;
   fp_add sub_spec_amt (
     .clk(clk),
@@ -71,24 +66,19 @@ module ray_reflector (
     .sum(one_sub_spec_amt)
   );
 
-  // Pipeline t, 1-t for direction calculation
   fp spec_amt_piped_dir;
   fp one_sub_spec_amt_piped_dir;
-  pipeline #(.WIDTH(FP_BITS), .DEPTH(16)) spec_amt_pipe (
+  pipeline #(.WIDTH(FP_BITS), .DEPTH(13)) spec_amt_pipe (
     .clk(clk),
     .in(spec_amt),
     .out(spec_amt_piped_dir)
   );
-  pipeline #(.WIDTH(FP_BITS), .DEPTH(14)) one_sub_spec_amt_pipe (
+  pipeline #(.WIDTH(FP_BITS), .DEPTH(12)) one_sub_spec_amt_pipe (
     .clk(clk),
     .in(one_sub_spec_amt),
     .out(one_sub_spec_amt_piped_dir)
   );
 
-  // ===== BRANCH 1: RAY DIRECTION =====
-
-  // Diffuse direction
-  // 18 cycles behind
   fp_vec3 rng_vec;
   prng_sphere_lfsr prng_sphere (
     .clk(clk),
@@ -112,8 +102,12 @@ module ray_reflector (
     .v(rng_added),
     .normed(diffuse_dir)
   );
-
-  // Specular direction
+  fp_vec3 diffuse_dir_piped;
+  pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(2)) diffuse_dir_pipe (
+    .clk(clk),
+    .in(diffuse_dir),
+    .out(diffuse_dir_piped)
+  );
   fp_vec3 specular_dir;
   specular_reflect spec_reflector (
     .clk(clk),
@@ -123,7 +117,6 @@ module ray_reflector (
     .out_dir(specular_dir)
   );
 
-  // Delay the specular direction so both endpoints reach the lerp together.
   fp_vec3 specular_dir_piped;
   pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(10)) spec_dir_pipe (
     .clk(clk),
@@ -131,25 +124,29 @@ module ray_reflector (
     .out(specular_dir_piped)
   );
 
-  // Lerp from specular dir to diffuse dir and renormalize.
   fp_vec3 new_ray_dir_prenorm;
   fp_vec3_lerp lerp_dir (
     .clk(clk),
     .rst(rst),
-    .v(diffuse_dir),
+    .v(diffuse_dir_piped),
     .w(specular_dir_piped),
     .t(spec_amt_piped_dir),
     .one_sub_t(one_sub_spec_amt_piped_dir),
     .lerped(new_ray_dir_prenorm)
   );
 
+  fp_vec3 new_dir_unaligned;
   fp_vec3_normalize norm_dir (
     .clk(clk),
     .v(new_ray_dir_prenorm),
-    .normed(new_dir)
+    .normed(new_dir_unaligned)
+  );
+  pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(REFLECT_DONE_DELAY - NEW_DIR_DELAY)) new_dir_pipe (
+    .clk(clk),
+    .in(new_dir_unaligned),
+    .out(new_dir)
   );
 
-  // Pipeline the origin to the same fixed output latency.
   fp_vec3 hit_pos_piped;
   pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(35)) origin_pipe (
     .clk(clk),
@@ -178,12 +175,22 @@ module ray_reflector (
     .v(hit_pos_piped),
     .w(scaled_normal),
     .is_sub(1'b0),
-    .sum(new_origin)
+    .sum(new_origin_unaligned)
+  );
+  fp_vec3 new_origin_unaligned;
+  pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(1)) new_origin_pipe (
+    .clk(clk),
+    .in(new_origin_unaligned),
+    .out(new_origin)
   );
 
-  // ===== BRANCH 2: NEW COLOR =====
+  fp_color ray_color_piped;
+  pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(5)) ray_color_pipe (
+    .clk(clk),
+    .in(ray_color),
+    .out(ray_color_piped)
+  );
 
-  // Calculate additional incoming light.
   fp_color extra_income_light;
   fp_vec3_mul mul_extra_income_light (
     .clk(clk),
@@ -192,9 +199,8 @@ module ray_reflector (
     .prod(extra_income_light)
   );
 
-  // Calculate new incoming light and delay it to the fixed output latency.
   fp_color income_light_piped2;
-  pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(2)) income_light_pipe (
+  pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(3)) income_light_pipe (
     .clk(clk),
     .in(income_light),
     .out(income_light_piped2)
@@ -209,7 +215,7 @@ module ray_reflector (
     .is_sub(1'b0),
     .sum(new_income_light_unpiped)
   );
-  pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(32)) new_income_light_pipe (
+  pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(33)) new_income_light_pipe (
     .clk(clk),
     .in(new_income_light_unpiped),
     .out(new_income_light)
@@ -219,22 +225,22 @@ module ray_reflector (
   fp_color true_mat_color;
   fp_color mat_color_piped;
   fp_color mat_spec_color_piped;
-  fp one_sub_spec_amt_piped_color;
-
-  pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(2)) mat_color_pipe (
+  fp spec_amt_piped_color;
+ 
+  pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(1)) mat_color_pipe (
     .clk(clk),
     .in(hit_mat.color),
     .out(mat_color_piped)
   );
-  pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(2)) mat_spec_color_pipe (
+  pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(1)) mat_spec_color_pipe (
     .clk(clk),
     .in(hit_mat.spec_color),
     .out(mat_spec_color_piped)
   );
-  pipeline #(.WIDTH(FP_BITS), .DEPTH(TRUE_MAT_ONE_SUB_ALIGN_DELAY)) one_sub_spec_amt_color_pipe (
+  pipeline #(.WIDTH(FP_BITS), .DEPTH(1)) spec_amt_color_pipe (
     .clk(clk),
-    .in(one_sub_spec_amt),
-    .out(one_sub_spec_amt_piped_color)
+    .in(spec_amt),
+    .out(spec_amt_piped_color)
   );
 
   fp_vec3_lerp lerp_true_mat_color (
@@ -242,26 +248,20 @@ module ray_reflector (
     .rst(rst),
     .v(mat_color_piped),
     .w(mat_spec_color_piped),
-    .t(spec_amt_pipe.pipe[1]),
-    .one_sub_t(one_sub_spec_amt_piped_color),
+    .t(spec_amt_piped_color),
+    .one_sub_t(one_sub_spec_amt),
     .lerped(true_mat_color)
   );
 
-  fp_color ray_color_piped7;
-  pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(7)) ray_color_pipe (
-    .clk(clk),
-    .in(ray_color),
-    .out(ray_color_piped7)
-  );
   fp_color new_color_unpiped;
   fp_vec3_mul mul_new_ray_color (
     .clk(clk),
     .rst(rst),
-    .v(ray_color_piped7),
+    .v(ray_color_piped),
     .w(true_mat_color),
     .prod(new_color_unpiped)
   );
-  pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(29)) new_ray_color_pipe (
+  pipeline #(.WIDTH(FP_VEC3_BITS), .DEPTH(31)) new_ray_color_pipe (
     .clk(clk),
     .in(new_color_unpiped),
     .out(new_color)

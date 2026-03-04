@@ -31,12 +31,7 @@ module rtx #(
 
   fp_vec3 ray_origin, ray_dir;
   logic ray_valid_caster;
-
-  // Differential to act as trigger
-  logic rst_prev;
-  always_ff @(posedge clk) begin
-    rst_prev <= rst;
-  end
+  logic tracer_ray_ready;
 
   ray_caster #(
     .WIDTH(WIDTH), .HEIGHT(HEIGHT)
@@ -44,7 +39,8 @@ module rtx #(
     .clk(clk),
     .rst(rst),
     .cam(cam),
-    .new_ray((!rst && rst_prev) || ray_done),
+    .new_ray(!rst),
+    .ray_ready(tracer_ray_ready),
 
     .pixel_h(pixel_h_caster),
     .pixel_v(pixel_v_caster),
@@ -56,10 +52,11 @@ module rtx #(
     .lfsr_seed(lfsr_seed)
   );
 
-  logic tracer_ready;
   fp_color pixel_color;
 
   logic tracer_ray_done;
+  logic [10:0] tracer_pixel_h;
+  logic [9:0] tracer_pixel_v;
 
   ray_tracer #(
     .WIDTH(WIDTH), .HEIGHT(HEIGHT)
@@ -73,12 +70,13 @@ module rtx #(
     .ray_origin(ray_origin),
     .ray_dir(ray_dir),
     .ray_valid(ray_valid_caster),
+    .ray_ready(tracer_ray_ready),
 
     // Doubles as a "pixel valid" signal
     .ray_done(tracer_ray_done),
     .pixel_color(pixel_color),
-    .pixel_h_out(pixel_h),
-    .pixel_v_out(pixel_v),
+    .pixel_h_out(tracer_pixel_h),
+    .pixel_v_out(tracer_pixel_v),
     
     // Dynamic parameter: # of bounces
     .max_bounces(max_bounces),
@@ -91,8 +89,7 @@ module rtx #(
     .mat_dict_idx(mat_dict_idx),
     .mat_dict_mat(mat_dict_mat),
 
-    // SET SEED FOR LFSR HERE
-    .lfsr_seed(48'h1)
+    .lfsr_seed(lfsr_seed)
   );
 
   // Convert to 565 representation
@@ -105,7 +102,9 @@ module rtx #(
   convert_fp_uint #(.WIDTH(6), .FRAC(6)) g_convert (.clk(clk), .x(pixel_color.g), .n(rtx_pixel[10:5]));
   convert_fp_uint #(.WIDTH(5), .FRAC(5)) b_convert (.clk(clk), .x(pixel_color.b), .n(rtx_pixel[15:11]));
 
-  // Delay ray_done by 1 cycle for the conversion
+  // Delay result metadata by 1 cycle so it stays aligned with RGB565 conversion
+  pipeline #(.WIDTH(11), .DEPTH(1)) pixel_h_pipe (.clk(clk), .in(tracer_pixel_h), .out(pixel_h));
+  pipeline #(.WIDTH(10), .DEPTH(1)) pixel_v_pipe (.clk(clk), .in(tracer_pixel_v), .out(pixel_v));
   pipeline #(.WIDTH(1), .DEPTH(1)) ray_done_pipe (.clk(clk), .in(tracer_ray_done), .out(ray_done));
 
 endmodule

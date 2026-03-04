@@ -6,7 +6,7 @@ from pathlib import Path
 import cocotb
 from cocotb.clock import Clock
 from cocotb.runner import get_runner
-from cocotb.triggers import ClockCycles
+from cocotb.triggers import ClockCycles, RisingEdge, ReadOnly
 
 import numpy as np
 
@@ -17,8 +17,7 @@ from utils import convert_fp_vec3, make_fp_vec3
 from make_scene_buffer import Material
 
 
-FAST_DELAY = 14
-BLEND_DELAY = 28
+REFLECT_DELAY = 37
 TEST_MATERIALS = [
     Material(
         color=(0.5, 0.25, 0.75),
@@ -39,6 +38,13 @@ TEST_MATERIALS = [
         emit_color=(0.0, 0.0, 0.0),
         spec_color=(0.3, 0.2, 0.9),
         smoothness=0.5,
+        specular_prob=1.0,
+    ),
+    Material(
+        color=(0.4, 0.3, 0.2),
+        emit_color=(0.2, 0.05, 0.1),
+        spec_color=(0.6, 0.4, 0.9),
+        smoothness=1.0,
         specular_prob=1.0,
     ),
 ]
@@ -63,6 +69,12 @@ def assert_vec_close(actual, expected, tol=0.03):
         assert abs(got - want) < tol, f"expected {expected}, got {actual}"
 
 
+def specular_reflect(in_dir, normal):
+    in_dir = np.asarray(in_dir, dtype=float)
+    normal = np.asarray(normal, dtype=float)
+    return tuple(in_dir - 2.0 * np.dot(in_dir, normal) * normal)
+
+
 async def launch_case(dut, *, ray_dir, ray_color, income_light, hit_pos, hit_normal, hit_mat_idx):
     dut.ray_dir.value = make_fp_vec3(tuple(ray_dir))
     dut.ray_color.value = make_fp_vec3(tuple(ray_color))
@@ -82,6 +94,35 @@ async def wait_for_done(dut, expected_cycles):
         if cycle < expected_cycles:
             assert not signal_is_high(dut.reflect_done), f"reflect_done rose early at cycle {cycle}"
     assert signal_is_high(dut.reflect_done), f"reflect_done did not rise at cycle {expected_cycles}"
+
+
+def reflect_outputs(dut):
+    return {
+        "new_dir": convert_fp_vec3(dut.new_dir.value),
+        "new_origin": convert_fp_vec3(dut.new_origin.value),
+        "new_color": convert_fp_vec3(dut.new_color.value),
+        "new_income_light": convert_fp_vec3(dut.new_income_light.value),
+    }
+
+
+def assert_outputs_close(actual, expected, tol=0.03):
+    for key, want in expected.items():
+        assert_vec_close(actual[key], want, tol=tol)
+
+
+def specular_expected(*, material, ray_dir, ray_color, income_light, hit_pos, hit_normal):
+    hit_pos = np.asarray(hit_pos, dtype=float)
+    hit_normal = np.asarray(hit_normal, dtype=float)
+    ray_color = np.asarray(ray_color, dtype=float)
+    income_light = np.asarray(income_light, dtype=float)
+    return {
+        "new_dir": specular_reflect(ray_dir, hit_normal),
+        "new_origin": tuple(hit_pos + (2 ** -17) * hit_normal),
+        "new_color": tuple(ray_color * np.asarray(material.spec_color, dtype=float)),
+        "new_income_light": tuple(
+            income_light + ray_color * np.asarray(material.emit_color, dtype=float)
+        ),
+    }
 
 
 @cocotb.test()
@@ -115,7 +156,7 @@ async def test_module(dut):
         hit_normal=hit_normal,
         hit_mat_idx=0,
     )
-    await wait_for_done(dut, FAST_DELAY - 1)
+    await wait_for_done(dut, REFLECT_DELAY)
     assert dut.mat_dict_idx.value.integer == 0
     assert_vec_close(convert_fp_vec3(dut.new_color.value), (0.375, 0.125, 0.1875))
     assert_vec_close(convert_fp_vec3(dut.new_income_light.value), (0.175, 0.3, 0.375))
@@ -135,7 +176,7 @@ async def test_module(dut):
         hit_normal=normal,
         hit_mat_idx=1,
     )
-    await wait_for_done(dut, FAST_DELAY - 1)
+    await wait_for_done(dut, REFLECT_DELAY)
     assert dut.mat_dict_idx.value.integer == 1
     assert_vec_close(convert_fp_vec3(dut.new_color.value), (0.72, 0.24, 0.08))
     assert_vec_close(convert_fp_vec3(dut.new_income_light.value), (0.045, 0.31, 0.55))
@@ -153,8 +194,87 @@ async def test_module(dut):
         hit_normal=normalize((0.1, 0.2, 1.0)),
         hit_mat_idx=2,
     )
-    await wait_for_done(dut, BLEND_DELAY - 1)
+    await wait_for_done(dut, REFLECT_DELAY)
     await ClockCycles(dut.clk, 2)
+
+
+@cocotb.test()
+async def test_back_to_back_fixed_latency(dut):
+    cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
+
+    dut.rst.value = 1
+    dut.hit_valid.value = 0
+    dut.ray_dir.value = 0
+    dut.ray_color.value = 0
+    dut.income_light.value = 0
+    dut.hit_pos.value = 0
+    dut.hit_normal.value = 0
+    dut.hit_mat_idx.value = 0
+    dut.lfsr_seed.value = int("0123456789abcdef01234567", 16)
+    await ClockCycles(dut.clk, 10)
+    dut.rst.value = 0
+    await ClockCycles(dut.clk, 2)
+
+    case0 = {
+        "ray_dir": normalize((1.0, -1.0, -0.5)),
+        "ray_color": (0.9, 0.4, 0.2),
+        "income_light": (0.0, 0.25, 0.5),
+        "hit_pos": (0.0, 1.0, 2.0),
+        "hit_normal": normalize((0.0, 0.0, 1.0)),
+        "hit_mat_idx": 1,
+    }
+    case1 = {
+        "ray_dir": normalize((-0.2, 0.5, -1.0)),
+        "ray_color": (0.6, 0.8, 0.3),
+        "income_light": (0.15, 0.05, 0.4),
+        "hit_pos": (-1.0, 0.5, 1.5),
+        "hit_normal": normalize((0.0, 1.0, 1.0)),
+        "hit_mat_idx": 3,
+    }
+
+    expected0 = specular_expected(
+        material=TEST_MATERIALS[1],
+        ray_dir=case0["ray_dir"],
+        ray_color=case0["ray_color"],
+        income_light=case0["income_light"],
+        hit_pos=case0["hit_pos"],
+        hit_normal=case0["hit_normal"],
+    )
+    expected1 = specular_expected(
+        material=TEST_MATERIALS[3],
+        ray_dir=case1["ray_dir"],
+        ray_color=case1["ray_color"],
+        income_light=case1["income_light"],
+        hit_pos=case1["hit_pos"],
+        hit_normal=case1["hit_normal"],
+    )
+
+    dut.ray_dir.value = make_fp_vec3(case0["ray_dir"])
+    dut.ray_color.value = make_fp_vec3(case0["ray_color"])
+    dut.income_light.value = make_fp_vec3(case0["income_light"])
+    dut.hit_pos.value = make_fp_vec3(case0["hit_pos"])
+    dut.hit_normal.value = make_fp_vec3(case0["hit_normal"])
+    dut.hit_mat_idx.value = case0["hit_mat_idx"]
+    dut.hit_valid.value = 1
+    await ClockCycles(dut.clk, 1)
+
+    dut.ray_dir.value = make_fp_vec3(case1["ray_dir"])
+    dut.ray_color.value = make_fp_vec3(case1["ray_color"])
+    dut.income_light.value = make_fp_vec3(case1["income_light"])
+    dut.hit_pos.value = make_fp_vec3(case1["hit_pos"])
+    dut.hit_normal.value = make_fp_vec3(case1["hit_normal"])
+    dut.hit_mat_idx.value = case1["hit_mat_idx"]
+    await ClockCycles(dut.clk, 1)
+
+    dut.hit_valid.value = 0
+    await RisingEdge(dut.reflect_done)
+    await ReadOnly()
+    assert_outputs_close(reflect_outputs(dut), expected0)
+
+    await ClockCycles(dut.clk, 1)
+    assert signal_is_high(dut.reflect_done)
+    await ReadOnly()
+    assert_outputs_close(reflect_outputs(dut), expected1)
 
 
 def runner():

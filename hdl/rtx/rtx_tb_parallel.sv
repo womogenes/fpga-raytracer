@@ -1,8 +1,5 @@
 `default_nettype none
 
-// Testbench for rtx
-// All this does is wrap rtx but provide scene buffer as well
-
 module rtx_tb_parallel #(
   parameter WIDTH = 1280,
   parameter HEIGHT = 720
@@ -18,6 +15,8 @@ module rtx_tb_parallel #(
   input wire new_ray,
 
   output logic [15:0] rtx_pixel,
+  output logic [10:0] pixel_h_out,
+  output logic [9:0] pixel_v_out,
   output logic ray_done,
 
   // DEBUG: to be used only for testbench
@@ -32,9 +31,25 @@ module rtx_tb_parallel #(
 
   fp_vec3 ray_origin, ray_dir;
   logic ray_valid_caster;
+  logic launch_caster;
+  logic maker_request_pending;
+  logic tracer_ray_ready;
 
-  // Initialize scene buffer
-  // Bind inputs to ray tracer
+  assign launch_caster = new_ray && tracer_ray_ready && !maker_request_pending;
+
+  always_ff @(posedge clk) begin
+    if (rst) begin
+      maker_request_pending <= 1'b0;
+    end else begin
+      if (launch_caster) begin
+        maker_request_pending <= 1'b1;
+      end
+      if (ray_valid_caster) begin
+        maker_request_pending <= 1'b0;
+      end
+    end
+  end
+
   scene_buffer #(.INIT_FILE("data/scene_buffer.mem")) scene_buf (
     .clk(clk),
     .rst(rst),
@@ -63,7 +78,7 @@ module rtx_tb_parallel #(
     .ray_origin(ray_origin),
     .ray_dir(ray_dir),
     .ray_valid(ray_valid_caster),
-    .new_ray(new_ray),
+    .new_ray(launch_caster),
 
     // Outputs
     .pixel_h_out(pixel_h_caster),
@@ -74,6 +89,8 @@ module rtx_tb_parallel #(
 
   logic ray_done_tracer;
   fp_color pixel_color;
+  logic [10:0] tracer_pixel_h;
+  logic [9:0] tracer_pixel_v;
 
   ray_tracer #(
     .WIDTH(WIDTH),
@@ -88,14 +105,15 @@ module rtx_tb_parallel #(
     .ray_origin(ray_origin),
     .ray_dir(ray_dir),
     .ray_valid(ray_valid_caster),
+    .ray_ready(tracer_ray_ready),
     
     .lfsr_seed(lfsr_seed),
 
     // Doubles as a "pixel valid" signal
     .ray_done(ray_done_tracer),
     .pixel_color(pixel_color),
-    // .pixel_h_out(pixel_h),
-    // .pixel_v_out(pixel_v),
+    .pixel_h_out(tracer_pixel_h),
+    .pixel_v_out(tracer_pixel_v),
 
     .max_bounces(max_bounces),
 
@@ -118,7 +136,9 @@ module rtx_tb_parallel #(
   convert_fp_uint #(.WIDTH(6), .FRAC(6)) g_convert (.clk(clk), .x(pixel_color.g), .n(rtx_pixel[10:5]));
   convert_fp_uint #(.WIDTH(5), .FRAC(5)) b_convert (.clk(clk), .x(pixel_color.b), .n(rtx_pixel[15:11]));
 
-  // Delay ray_done by 1 cycle for the conversion
+  // Delay result metadata by 1 cycle so it stays aligned with RGB565 conversion.
+  pipeline #(.WIDTH(11), .DEPTH(1)) pixel_h_pipe (.clk(clk), .in(tracer_pixel_h), .out(pixel_h_out));
+  pipeline #(.WIDTH(10), .DEPTH(1)) pixel_v_pipe (.clk(clk), .in(tracer_pixel_v), .out(pixel_v_out));
   pipeline #(.WIDTH(1), .DEPTH(1)) ray_done_pipe (.clk(clk), .in(ray_done_tracer), .out(ray_done));
 
 endmodule

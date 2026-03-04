@@ -1,9 +1,3 @@
-"""
-test_rtx_parallel.py
-
-Takes advantage of multithreading to render testbench images much faster
-"""
-
 import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -90,7 +84,6 @@ CPU_COUNT = os.cpu_count() or 1
 N_CHUNKS = args.chunks or (2 * CPU_COUNT * N_FRAMES)
 TOTAL_PIXELS = WIDTH * HEIGHT
 
-# Round up on chunk size
 CHUNK_SIZE = (TOTAL_PIXELS + N_CHUNKS - 1) // N_CHUNKS
 CHUNK_RANGES = [
     (i * CHUNK_SIZE, min((i + 1) * CHUNK_SIZE - 1, TOTAL_PIXELS - 1))
@@ -108,8 +101,6 @@ MAT_DICT_MEM_PATH = str(data_dir / "mat_dict.mem")
 with open(SCENE_BUF_MEM_PATH, "r") as fin:
     NUM_OBJS = fin.read().strip().count("\n") + 1
 
-# Scope simulator scratch paths to this specific invocation so concurrent scene
-# renders cannot overwrite each other's chunk outputs or copied .mem files.
 run_instance_key_parts = [
     str(Path(args.json).resolve()) if args.json else "<no-scene>",
     str(data_dir.resolve()),
@@ -129,15 +120,12 @@ if "PIXEL_START_IDX" not in os.environ:
     shutil.rmtree(CHUNKS_OUT_DIR, ignore_errors=True)
 os.makedirs(CHUNKS_OUT_DIR, exist_ok=True)
 
-# Give each render invocation its own build directory because the copied scene
-# and material .mem files under build/data are scene-specific.
 BUILD_DIR = Path(os.environ.get(
     "RTX_BUILD_DIR",
     proj_path / "sim" / "sim_build" / "rtx_parallel" / f"verilator_{WIDTH}x{HEIGHT}_{RUN_INSTANCE_TAG}",
 ))
 os.makedirs(BUILD_DIR, exist_ok=True)
 
-# Common configuration for Verilator build and test
 SIM = os.getenv("SIM", "verilator")
 HDL_TOPLEVEL = "rtx_tb_parallel"
 
@@ -181,10 +169,8 @@ def chunk_seed(chunk_idx: int) -> int:
 
 @cocotb.test()
 async def test_module(dut):
-    # dut._log.info("Starting...")
     cocotb.start_soon(Clock(dut.clk, 10, units="ns").start())
 
-    # dut._log.info("Holding reset...")
     chunk_idx = int(os.environ.get("CHUNK_IDX", "0"))
     dut.lfsr_seed.value = chunk_seed(chunk_idx)
     dut.rst.value = 1
@@ -214,31 +200,59 @@ async def test_module(dut):
     pixel_end_idx = int(os.environ["PIXEL_END_IDX"])
     n_pixels = pixel_end_idx - pixel_start_idx + 1
     pixel_values = np.zeros((n_pixels, 3))
+    total_samples = N_FRAMES * n_pixels
     total_chunk_cycles = 0
+    issued = 0
+    completed = 0
+    stall_cycles = 0
 
-    for i in tqdm(range(N_FRAMES * n_pixels), ncols=120, desc=f"[chunk {chunk_idx:>3}/{NUM_CHUNKS_ACTUAL:<3}]"):
-        pixel_idx = (i % n_pixels) + pixel_start_idx
-        pixel_v_in = pixel_idx // WIDTH
-        pixel_h_in = pixel_idx % WIDTH
+    progress = tqdm(total=total_samples, ncols=120, desc=f"[chunk {chunk_idx:>3}/{NUM_CHUNKS_ACTUAL:<3}]")
 
-        dut.pixel_h_in.value = pixel_h_in
-        dut.pixel_v_in.value = pixel_v_in
-        dut.new_ray.value = 1
+    while completed < total_samples:
+        request_pending = issued < total_samples
+        if request_pending:
+            pixel_idx = (issued % n_pixels) + pixel_start_idx
+            dut.pixel_v_in.value = pixel_idx // WIDTH
+            dut.pixel_h_in.value = pixel_idx % WIDTH
+            dut.new_ray.value = 1
+        else:
+            dut.new_ray.value = 0
+        await cocotb.triggers.ReadOnly()
+        launch_now = request_pending and dut.launch_caster.value.integer == 1
+
         await ClockCycles(dut.clk, 1)
-        dut.new_ray.value = 0
+        total_chunk_cycles += 1
 
-        pixel_cycles = 1
-        while not dut.ray_done.value.integer:
-            await ClockCycles(dut.clk, 1)
-            pixel_cycles += 1
-        total_chunk_cycles += pixel_cycles
+        if launch_now:
+            issued += 1
+            stall_cycles = 0
 
-        pixel_color = unpack_color8(dut.rtx_pixel.value.integer)
+        if dut.ray_done.value.integer:
+            pixel_h_done = dut.pixel_h_out.value.integer
+            pixel_v_done = dut.pixel_v_out.value.integer
+            done_pixel_idx = pixel_v_done * WIDTH + pixel_h_done
+            assert pixel_start_idx <= done_pixel_idx <= pixel_end_idx, (
+                f"completed pixel {done_pixel_idx} outside chunk {pixel_start_idx}-{pixel_end_idx}"
+            )
 
-        r, g, b = pixel_color
-        pixel_values[pixel_idx - pixel_start_idx] += (r, g, b)
+            pixel_color = unpack_color8(dut.rtx_pixel.value.integer)
+            r, g, b = pixel_color
+            pixel_values[done_pixel_idx - pixel_start_idx] += (r, g, b)
+            completed += 1
+            progress.update(1)
+            stall_cycles = 0
+        else:
+            stall_cycles += 1
+            assert stall_cycles < 50000, (
+                f"render stalled after {stall_cycles} cycles: issued={issued}, completed={completed}, "
+                f"ray_done={dut.ray_done.value.integer}, "
+                f"work_count={dut.tracer.work_count.value.integer}, "
+                f"intx_active={dut.tracer.intx_active.value.integer}, "
+                f"reflect_inflight={dut.tracer.reflect_inflight_count.value.integer}"
+            )
 
-    # Save into common chunks directory
+    progress.close()
+
     save_path = CHUNKS_OUT_DIR / f"chunk_{chunk_idx:04}.npy"
     np.save(save_path, np.floor(pixel_values / N_FRAMES))
     stats_path = CHUNKS_OUT_DIR / f"chunk_{chunk_idx:04}.json"
@@ -256,7 +270,6 @@ async def test_module(dut):
 
 
 def build_verilator():
-    """Build Verilator executable once (called from main process)."""
     print(f"Building Verilator for {WIDTH}x{HEIGHT}...")
 
     os.makedirs(BUILD_DIR / "data", exist_ok=True)
@@ -267,7 +280,7 @@ def build_verilator():
     runner.build(
         sources=SOURCES,
         hdl_toplevel=HDL_TOPLEVEL,
-        always=False,  # skip if already built
+        always=False,
         build_args=BUILD_TEST_ARGS,
         parameters=PARAMETERS,
         timescale=("1ns", "1ps"),
@@ -279,14 +292,10 @@ def build_verilator():
 
 
 def run_test_worker(pixel_start_idx: int, pixel_end_idx: int, chunk_idx: int):
-    """Run test for a specific pixel chunk (called from worker process)."""
-
-    # Set environment variables for this chunk
     os.environ["PIXEL_START_IDX"] = str(pixel_start_idx)
     os.environ["PIXEL_END_IDX"] = str(pixel_end_idx)
     os.environ["CHUNK_IDX"] = str(chunk_idx)
 
-    # Set test parameters so workers use correct WIDTH/HEIGHT
     os.environ["TEST_WIDTH"] = str(WIDTH)
     os.environ["TEST_HEIGHT"] = str(HEIGHT)
     os.environ["TEST_N_FRAMES"] = str(N_FRAMES)

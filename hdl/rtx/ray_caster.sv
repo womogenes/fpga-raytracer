@@ -9,6 +9,7 @@ module ray_caster #(
   
   input camera cam,
   input wire new_ray,
+  input wire ray_ready,
 
   output logic [10:0] pixel_h,
   output logic [9:0] pixel_v,
@@ -20,6 +21,10 @@ module ray_caster #(
 );
   logic [10:0] pixel_h_rsg;
   logic [9:0] pixel_v_rsg;
+  logic launch_caster;
+  logic maker_request_pending;
+
+  assign launch_caster = new_ray && ray_ready && !maker_request_pending;
 
   ray_signal_gen #(
     .WIDTH(WIDTH),
@@ -27,33 +32,22 @@ module ray_caster #(
   ) rsg (
     .clk(clk),
     .rst(rst),
-    .new_ray(new_ray),
+    .new_ray(launch_caster),
 
     .pixel_h(pixel_h_rsg),
     .pixel_v(pixel_v_rsg)
   );
 
-  // "staging" registers to hold stuff until we want to release it
-  // `new_ray` triggers the staging release
-  logic maker_new_ray;
-  fp_vec3 staging_ray_origin;
-  fp_vec3 staging_ray_dir;
-  logic [10:0] staging_pixel_h;
-  logic [9:0] staging_pixel_v;
-
   always_ff @(posedge clk) begin
-    // Upon receiving a new_ray signal, we can immediately release
-    if (new_ray) begin
-      maker_new_ray <= 1'b1;
-      ray_valid <= 1'b1;
-      ray_origin <= staging_ray_origin;
-      ray_dir <= staging_ray_dir;
-      pixel_h <= staging_pixel_h;
-      pixel_v <= staging_pixel_v;
-      
+    if (rst) begin
+      maker_request_pending <= 1'b0;
     end else begin
-      maker_new_ray <= 1'b0;
-      ray_valid <= 1'b0;
+      if (launch_caster) begin
+        maker_request_pending <= 1'b1;
+      end
+      if (ray_valid) begin
+        maker_request_pending <= 1'b0;
+      end
     end
   end
 
@@ -67,16 +61,14 @@ module ray_caster #(
     .cam(cam),
     .pixel_h_in(pixel_h_rsg),
     .pixel_v_in(pixel_v_rsg),
-    .new_ray(maker_new_ray),
+    .new_ray(launch_caster),
 
-    .ray_origin(staging_ray_origin),
-    .ray_dir(staging_ray_dir),
-    // TODO: empty because we assume caster is always faster than tracer
-    //   but maybe we shouldn't assume this
-    .ray_valid(),
+    .ray_origin(ray_origin),
+    .ray_dir(ray_dir),
+    .ray_valid(ray_valid),
 
-    .pixel_h_out(staging_pixel_h),
-    .pixel_v_out(staging_pixel_v),
+    .pixel_h_out(pixel_h),
+    .pixel_v_out(pixel_v),
 
     .lfsr_seed(lfsr_seed)
   );
