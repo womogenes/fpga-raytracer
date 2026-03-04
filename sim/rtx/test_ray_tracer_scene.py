@@ -65,14 +65,20 @@ def object_hex_entries():
     return entries
 
 
-async def launch_ray(dut, direction):
+async def issue_ray(dut, direction):
     dut.ray_origin.value = make_fp_vec3((0.0, 0.0, 0.0))
     dut.ray_dir.value = make_fp_vec3(direction)
+    while not dut.ray_ready.value.integer:
+        await ClockCycles(dut.clk, 1)
     dut.ray_valid.value = 1
     await ClockCycles(dut.clk, 1)
     dut.ray_valid.value = 0
+
+
+async def await_color(dut):
     await with_timeout(RisingEdge(dut.ray_done), 5000, "ns")
     await ReadOnly()
+    return convert_fp_vec3(dut.pixel_color.value)
 
 
 def assert_color_close(actual, expected):
@@ -95,19 +101,21 @@ async def test_module(dut):
     dut.rst.value = 0
     await ClockCycles(dut.clk, 3)
 
-    await launch_ray(dut, normalize((-1.5, 4.0, 0.0)))
-    assert_color_close(convert_fp_vec3(dut.pixel_color.value), LEFT_EMIT)
+    await issue_ray(dut, normalize((-1.5, 4.0, 0.0)))
+    assert_color_close(await await_color(dut), LEFT_EMIT)
 
     await ClockCycles(dut.clk, 2)
 
-    await launch_ray(dut, normalize((1.5, 4.0, 0.0)))
-    assert_color_close(convert_fp_vec3(dut.pixel_color.value), RIGHT_EMIT)
+    await issue_ray(dut, normalize((1.5, 4.0, 0.0)))
+    assert_color_close(await await_color(dut), RIGHT_EMIT)
 
     await ClockCycles(dut.clk, 2)
 
     dut.max_bounces.value = 2
-    await launch_ray(dut, normalize((0.0, 1.0, 0.0)))
-    assert_color_close(convert_fp_vec3(dut.pixel_color.value), MIRROR_EXPECTED)
+    await issue_ray(dut, normalize((0.0, 1.0, 0.0)))
+    await issue_ray(dut, normalize((1.5, 4.0, 0.0)))
+    assert_color_close(await await_color(dut), RIGHT_EMIT)
+    assert_color_close(await await_color(dut), MIRROR_EXPECTED)
 
 
 def runner():

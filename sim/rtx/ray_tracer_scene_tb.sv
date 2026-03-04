@@ -12,7 +12,8 @@ module ray_tracer_scene_tb (
 
   output logic ray_done,
   output fp_color pixel_color,
-  output logic [7:0] mat_dict_idx
+  output logic [7:0] mat_dict_idx,
+  output logic ray_ready
 );
   object obj;
   material mat_dict_mat;
@@ -42,6 +43,7 @@ module ray_tracer_scene_tb (
     .ray_origin(ray_origin),
     .ray_dir(ray_dir),
     .ray_valid(ray_valid),
+    .ray_ready(ray_ready),
     .ray_done(ray_done),
     .pixel_color(pixel_color),
     .pixel_h_out(),

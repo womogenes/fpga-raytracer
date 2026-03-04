@@ -54,19 +54,36 @@ async def stream_scene(dut):
             await ClockCycles(dut.clk, 1)
 
 
-async def launch_ray(dut, direction):
+async def issue_ray(dut, direction):
     dut.ray_origin.value = make_fp_vec3((0.0, 0.0, 0.0))
     dut.ray_dir.value = make_fp_vec3(direction)
+    while not dut.ray_ready.value.integer:
+        await ClockCycles(dut.clk, 1)
     dut.ray_valid.value = 1
     await ClockCycles(dut.clk, 1)
     dut.ray_valid.value = 0
+
+
+async def await_color(dut):
     await with_timeout(RisingEdge(dut.ray_done), 5000, "ns")
     await ReadOnly()
+    return convert_fp_vec3(dut.pixel_color.value)
 
 
 def assert_color_close(actual, expected):
     for got, want in zip(actual, expected):
         assert abs(got - want) < 0.08, f"expected {expected}, got {actual}"
+
+
+def assert_color_set_close(actual_colors, expected_colors):
+    remaining = list(actual_colors)
+    for expected in expected_colors:
+        for idx, actual in enumerate(remaining):
+            if all(abs(got - want) < 0.08 for got, want in zip(actual, expected)):
+                remaining.pop(idx)
+                break
+        else:
+            raise AssertionError(f"missing expected color {expected} from {actual_colors}")
 
 
 @cocotb.test()
@@ -88,18 +105,30 @@ async def test_module(dut):
     cocotb.start_soon(stream_scene(dut))
     await ClockCycles(dut.clk, 3)
 
-    await launch_ray(dut, normalize((-1.0, 4.0, 0.0)))
-    assert_color_close(convert_fp_vec3(dut.pixel_color.value), LEFT_EMIT)
+    await issue_ray(dut, normalize((-1.0, 4.0, 0.0)))
+    assert_color_close(await await_color(dut), LEFT_EMIT)
 
     await ClockCycles(dut.clk, 2)
 
-    await launch_ray(dut, normalize((1.0, 4.0, 0.0)))
-    assert_color_close(convert_fp_vec3(dut.pixel_color.value), RIGHT_EMIT)
+    await issue_ray(dut, normalize((1.0, 4.0, 0.0)))
+    assert_color_close(await await_color(dut), RIGHT_EMIT)
 
     await ClockCycles(dut.clk, 2)
 
-    await launch_ray(dut, normalize((0.0, 0.0, 1.0)))
-    assert_color_close(convert_fp_vec3(dut.pixel_color.value), (0.0, 0.0, 0.0))
+    await issue_ray(dut, normalize((0.0, 0.0, 1.0)))
+    assert_color_close(await await_color(dut), (0.0, 0.0, 0.0))
+
+    await ClockCycles(dut.clk, 2)
+
+    await issue_ray(dut, normalize((-1.0, 4.0, 0.0)))
+    await issue_ray(dut, normalize((1.0, 4.0, 0.0)))
+    await issue_ray(dut, normalize((0.0, 0.0, 1.0)))
+    overlap_colors = [
+        await await_color(dut),
+        await await_color(dut),
+        await await_color(dut),
+    ]
+    assert_color_set_close(overlap_colors, [LEFT_EMIT, RIGHT_EMIT, (0.0, 0.0, 0.0)])
 
 
 def runner():
