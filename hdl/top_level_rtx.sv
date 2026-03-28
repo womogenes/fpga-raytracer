@@ -51,20 +51,27 @@ module top_level (
   // buffered clock signal (we need this apparently)
   logic clk_100mhz_buffered;
  
-  // have btn[0] control system reset
-  logic sys_rst;
-  assign sys_rst = btn[0]; // reset is btn[0]
-
-  logic sys_rst_rtx;
-  assign sys_rst_rtx = sys_rst;
-  logic sys_rst_pixel;
-  assign sys_rst_pixel = sys_rst;
-  logic sys_rst_controller;
-  assign sys_rst_controller = sys_rst;
- 
   logic clk_pixel, clk_5x, clk_rtx; // clock lines
   logic locked; // locked signal (we'll leave unused but still hook it up)
   assign clk_rtx = clk_100mhz_buffered;
+
+  logic sys_rst_btn;
+  assign sys_rst_btn = btn[0];
+
+  logic sys_rst_pixel;
+  logic sys_rst_rtx;
+  logic sys_rst_controller;
+  logic sys_rst_uart;
+
+  logic clk_controller;
+  logic clk_ddr3;
+  logic i_ref_clk;
+  logic clk_ddr3_90;
+  logic clk_camera;
+  logic lab06_clk_locked;
+  logic clk_camera_locked;
+  logic clk_pixel_locked;
+  logic hdmi_clk_locked;
  
   logic [10:0] h_count_hdmi; // h_count of system!
   logic [9:0] v_count_hdmi; // v_count of system!
@@ -79,7 +86,7 @@ module top_level (
   // default instantiation so making signals for 720p
   video_sig_gen mvg(
     .pixel_clk(clk_pixel),
-    .rst(sys_rst),
+    .rst(sys_rst_pixel),
     .h_count(h_count_hdmi),
     .v_count(v_count_hdmi),
     .v_sync(v_sync),
@@ -112,7 +119,7 @@ module top_level (
   // Keep it dead until memrequest_busy is false
   logic dram_ready;
   always_ff @(posedge clk_rtx) begin
-    if (sys_rst) begin
+    if (sys_rst_rtx) begin
       dram_ready <= 1'b0;
     end else begin
       dram_ready <= dram_ready | !highdef_fb.memrequest_busy;
@@ -136,7 +143,7 @@ module top_level (
 
   uart_receive #(100_000_000, 115_200) uart_receiver (
     .clk(clk_100mhz_buffered),
-    .rst(sys_rst),
+    .rst(sys_rst_uart),
     .din(uart_rx_buf1),
     .dout_valid(uart_rx_valid),
     .dout(uart_rx_byte)
@@ -144,7 +151,7 @@ module top_level (
 
   uart_memflash_rtx (
     .clk(clk_rtx),
-    .rst(sys_rst),
+    .rst(sys_rst_rtx),
     .uart_rx_valid(uart_rx_valid),
     .uart_rx_byte(uart_rx_byte),
 
@@ -182,7 +189,7 @@ module top_level (
   // dropping the initialization.
   scene_buffer #(.INIT_FILE("data/scene_buffer.mem")) scene_buf (
     .clk(clk_rtx),
-    .rst(sys_rst),
+    .rst(sys_rst_rtx),
     .num_objs(num_objs),
     .obj(scene_buf_obj),
 
@@ -208,7 +215,7 @@ module top_level (
 
   material_dictionary #(.INIT_FILE("data/mat_dict.mem")) mat_dict (
     .clk(clk_rtx),
-    .rst(sys_rst),
+    .rst(sys_rst_rtx),
     .flash_mat_wen(flash_mat_wen),
     .flash_mat_idx(flash_mat_idx),
     .flash_mat_data(flash_mat_data),
@@ -220,11 +227,41 @@ module top_level (
   // max bounces is dynamic now
   logic [7:0] max_bounces;
 
+  // Synchronize the user reset into each active clock domain instead of
+  // fanning raw btn[0] across unrelated clocks and clock-wizard resets.
+  logic rst_btn_pixel_ff0, rst_btn_pixel_ff1;
+  always_ff @(posedge clk_pixel) begin
+    rst_btn_pixel_ff0 <= sys_rst_btn;
+    rst_btn_pixel_ff1 <= rst_btn_pixel_ff0;
+  end
+  assign sys_rst_pixel = rst_btn_pixel_ff1 | !sysclk_locked | !hdmi_clk_locked;
+
+  logic rst_btn_rtx_ff0, rst_btn_rtx_ff1;
+  always_ff @(posedge clk_rtx) begin
+    rst_btn_rtx_ff0 <= sys_rst_btn;
+    rst_btn_rtx_ff1 <= rst_btn_rtx_ff0;
+  end
+  assign sys_rst_rtx = rst_btn_rtx_ff1 | !sysclk_locked | !lab06_clk_locked;
+
+  logic rst_btn_ctrl_ff0, rst_btn_ctrl_ff1;
+  always_ff @(posedge clk_controller) begin
+    rst_btn_ctrl_ff0 <= sys_rst_btn;
+    rst_btn_ctrl_ff1 <= rst_btn_ctrl_ff0;
+  end
+  assign sys_rst_controller = rst_btn_ctrl_ff1 | !sysclk_locked | !lab06_clk_locked;
+
+  logic rst_btn_uart_ff0, rst_btn_uart_ff1;
+  always_ff @(posedge clk_100mhz_buffered) begin
+    rst_btn_uart_ff0 <= sys_rst_btn;
+    rst_btn_uart_ff1 <= rst_btn_uart_ff0;
+  end
+  assign sys_rst_uart = rst_btn_uart_ff1 | !sysclk_locked | !lab06_clk_locked;
+
   // rtx requires external camera
   camera cam;
   always_ff @(posedge clk_rtx) begin
     // Initialize camera
-    if (sys_rst) begin
+    if (sys_rst_rtx) begin
       cam.origin <= 'h0;
       cam.forward <= {FP_ZER0, FP_HALF_SCREEN_WIDTH, FP_ZER0};  // (0, 0, 1280/2)
       cam.right <= {FP_ONE, FP_ZER0, FP_ZER0};                  // (1, 0, 0)
@@ -253,7 +290,7 @@ module top_level (
 
   rtx my_rtx(
     .clk(clk_rtx),
-    .rst(sys_rst | !dram_ready | uart_flash_wen),
+    .rst(sys_rst_rtx | !dram_ready | uart_flash_wen),
     .cam(cam),
 
     .rtx_pixel(rtx_pixel),
@@ -277,7 +314,7 @@ module top_level (
   logic rtx_overwrite;
   logic scene_changed;
   always_ff @(posedge clk_rtx) begin
-    if (sys_rst) begin
+    if (sys_rst_rtx) begin
       rtx_overwrite <= 1'b0;
       scene_changed <= 1'b0;
     end else if (uart_flash_wen | !dram_ready) begin
@@ -331,29 +368,20 @@ module top_level (
   //   .pixel_out_v_count() //nothing for now
   // );
 
-  logic clk_camera_locked;
-  logic clk_pixel_locked;
-
   // clocking wizards to generate the clock speeds we need for our different domains
   // clk_camera: 200MHz, fast enough to comfortably sample the cameera's PCLK (50MHz)
+  // Keep HDMI clocking independent from the DDR clock wizard. If `lcw` fails to
+  // lock, we still want a valid HDMI test image instead of a dead link.
   cw_hdmi_clk_wiz wizard_hdmi(
-    .sysclk(clk_100mhz_buffered),
+    .sysclk(clk_100mhz),
     .clk_pixel(clk_pixel),
     .clk_tmds(clk_5x),
     .reset(0),
-    .locked()
+    .locked(hdmi_clk_locked)
   );
 
-  logic clk_controller;
-  logic clk_ddr3;
-  logic i_ref_clk;
-  logic clk_ddr3_90;
-  logic clk_camera;
-
-  logic lab06_clk_locked;
-
   lab06_clk_wiz lcw(
-    .reset(btn[0]),
+    .reset(1'b0),
     .clk_in1(clk_100mhz),
     .clk_camera(clk_camera),
     .clk_xc(0),
@@ -420,17 +448,28 @@ module top_level (
     .ddr3_odt        (ddr3_odt)
   );
 
+  localparam logic [7:0] HDMI_TEST_R = 8'h0d;
+  localparam logic [7:0] HDMI_TEST_G = 8'h7a;
+  localparam logic [7:0] HDMI_TEST_B = 8'h31;
+
   always_comb begin
-    // always use dram; commented out bram
-    // if (sw[0]) begin
+    if (!sw[0]) begin
+      // Known-good HDMI mode to isolate the TMDS path from DDR/RTX bring-up.
+      if (active_draw_hdmi) begin
+        red = HDMI_TEST_R;
+        green = HDMI_TEST_G;
+        blue = HDMI_TEST_B;
+      end else begin
+        red = 8'h00;
+        green = 8'h00;
+        blue = 8'h00;
+      end
+    end else begin
+      // Normal mode: display DDR-backed framebuffer contents.
       red = {frame_buff_dram[4:0], 3'b0};
       green = {frame_buff_dram[10:5], 2'b0};
       blue = {frame_buff_dram[15:11], 3'b0};
-    // end else begin
-    //   red = frame_buff_bram[7:0];
-    //   green = frame_buff_bram[15:8];
-    //   blue = frame_buff_bram[23:16];
-    // end
+    end
   end
 
   logic v_sync_buffered;
@@ -456,7 +495,7 @@ module top_level (
  
   tmds_encoder tmds_blue(
     .clk(clk_pixel),
-    .rst(sys_rst),
+    .rst(sys_rst_pixel),
     .video_data(blue),
     .control({ v_sync_buffered, h_sync_buffered }),  //  control signals
     .video_enable(active_draw_buffered),
@@ -465,7 +504,7 @@ module top_level (
 
   tmds_encoder tmds_green(
     .clk(clk_pixel),
-    .rst(sys_rst),
+    .rst(sys_rst_pixel),
     .video_data(green),
     .control(2'b0),
     .video_enable(active_draw_buffered),
@@ -473,7 +512,7 @@ module top_level (
  
   tmds_encoder tmds_red(
     .clk(clk_pixel),
-    .rst(sys_rst),
+    .rst(sys_rst_pixel),
     .video_data(red),
     .control(2'b0),
     .video_enable(active_draw_buffered),
@@ -483,21 +522,21 @@ module top_level (
   tmds_serializer blue_ser(
     .clk_pixel(clk_pixel),
     .clk_5x(clk_5x),
-    .rst(sys_rst),
+    .rst(sys_rst_pixel),
     .tmds_in(tmds_10b[0]),
     .tmds_out(tmds_signal[0]));
 
   tmds_serializer green_ser(
     .clk_pixel(clk_pixel),
     .clk_5x(clk_5x),
-    .rst(sys_rst),
+    .rst(sys_rst_pixel),
     .tmds_in(tmds_10b[1]),
     .tmds_out(tmds_signal[1]));
 
   tmds_serializer red_ser(
     .clk_pixel(clk_pixel),
     .clk_5x(clk_5x),
-    .rst(sys_rst),
+    .rst(sys_rst_pixel),
     .tmds_in(tmds_10b[2]),
     .tmds_out(tmds_signal[2]));
  
@@ -511,6 +550,13 @@ module top_level (
   OBUFDS OBUFDS_green(.I(tmds_signal[1]), .O(hdmi_tx_p[1]), .OB(hdmi_tx_n[1]));
   OBUFDS OBUFDS_red  (.I(tmds_signal[2]), .O(hdmi_tx_p[2]), .OB(hdmi_tx_n[2]));
   OBUFDS OBUFDS_clock(.I(clk_pixel), .O(hdmi_clk_p), .OB(hdmi_clk_n));
+
+  assign led[5] = hdmi_clk_locked;
+  assign led[4] = lab06_clk_locked;
+  assign led[3] = sysclk_locked;
+  assign led[2] = sw[0];
+  assign led[1] = active_draw_hdmi;
+  assign led[0] = frame_count[5];
  
 endmodule //  top_level
 `default_nettype wire

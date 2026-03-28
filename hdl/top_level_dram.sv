@@ -185,7 +185,7 @@ endmodule
 
 `define FPATH(X) `"X`"
 
-module top_level (
+module top_level_dram_debug (
   // Genesys 2 provides a 200MHz differential system clock (SYSCLK_P/N).
   // We derive a local 100MHz clock from it to keep the rest of the design
   // (UART baud assumptions + existing clock wizards) unchanged.

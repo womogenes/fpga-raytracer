@@ -90,5 +90,6 @@ report_timing_summary -file $outputDir/post_route_timing_summary.rpt
 report_timing -file $outputDir/post_route_timing.rpt
 report_power -file $outputDir/post_route_power.rpt
 report_drc -file $outputDir/post_imp_drc.rpt
+write_bitstream -force $outputDir/final.bit
 #set_property SEVERITY {Warning} [get_drc_checks NSTD-1]
 #write_verilog -force $outputDir/cpu_impl_netlist.v -mode timesim -sdf_anno true

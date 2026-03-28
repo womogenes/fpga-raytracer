@@ -232,7 +232,22 @@ async def test_module(dut):
             pixel_v_done = dut.pixel_v_out.value.integer
             done_pixel_idx = pixel_v_done * WIDTH + pixel_h_done
             assert pixel_start_idx <= done_pixel_idx <= pixel_end_idx, (
-                f"completed pixel {done_pixel_idx} outside chunk {pixel_start_idx}-{pixel_end_idx}"
+                f"completed pixel {done_pixel_idx} outside chunk {pixel_start_idx}-{pixel_end_idx}; "
+                f"issued={issued} completed={completed} "
+                f"tb_pixel=({pixel_h_done},{pixel_v_done}) "
+                f"tracer_pixel=({dut.tracer_pixel_h.value.integer},{dut.tracer_pixel_v.value.integer}) "
+                f"ray_done_tracer={dut.ray_done_tracer.value.integer} "
+                f"result_count={dut.tracer.result_count.value.integer} "
+                f"result_rptr={dut.tracer.result_read_ptr.value.integer} "
+                f"result_wptr={dut.tracer.result_write_ptr.value.integer} "
+                f"result_push_count={dut.tracer.result_push_count.value.integer} "
+                f"miss_now={dut.tracer.miss_result_now_valid.value.integer} "
+                f"reflect_now={dut.tracer.reflect_result_now_valid.value.integer} "
+                f"head_h={dut.tracer.pixel_h_out.value.integer} "
+                f"head_v={dut.tracer.pixel_v_out.value.integer} "
+                f"work_count={dut.tracer.work_count.value.integer} "
+                f"intx_active=0x{dut.tracer.intx_active.value.integer:x} "
+                f"reflect_inflight={dut.tracer.reflect_inflight_count.value.integer}"
             )
 
             pixel_color = unpack_color8(dut.rtx_pixel.value.integer)

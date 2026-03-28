@@ -123,6 +123,8 @@ module ray_tracer #(
   fp_vec3 reflect_hit_norm;
   logic [REFLECT_META_BITS-1:0] reflect_meta_in_bits;
   logic [REFLECT_META_BITS-1:0] reflect_meta_out_bits;
+  logic reflect_meta_valid;
+  logic [REFLECT_DONE_DELAY-1:0] reflect_meta_valid_pipe;
 
   fp_vec3 rflx_new_dir;
   fp_vec3 rflx_new_origin;
@@ -165,6 +167,7 @@ module ray_tracer #(
 
   logic [10:0] done_ctx_pixel_h;
   logic [9:0] done_ctx_pixel_v;
+  fp_vec3 done_ctx_ray_origin;
   fp_vec3 done_ctx_ray_dir;
   fp_color done_ctx_income_light;
   fp_color done_ctx_ray_color;
@@ -175,6 +178,7 @@ module ray_tracer #(
   logic [7:0] reflect_meta_bounce_count;
   logic [10:0] reflect_ctx_pixel_h;
   logic [9:0] reflect_ctx_pixel_v;
+  fp_vec3 reflect_ctx_ray_origin;
   fp_vec3 reflect_ctx_ray_dir;
   fp_color reflect_ctx_income_light;
   fp_color reflect_ctx_ray_color;
@@ -197,6 +201,7 @@ module ray_tracer #(
   assign {
     done_ctx_pixel_h,
     done_ctx_pixel_v,
+    done_ctx_ray_origin,
     done_ctx_ray_dir,
     done_ctx_income_light,
     done_ctx_ray_color,
@@ -211,6 +216,7 @@ module ray_tracer #(
   assign {
     reflect_ctx_pixel_h,
     reflect_ctx_pixel_v,
+    reflect_ctx_ray_origin,
     reflect_ctx_ray_dir,
     reflect_ctx_income_light,
     reflect_ctx_ray_color,
@@ -238,7 +244,7 @@ module ray_tracer #(
     rflx_new_color,
     reflect_meta_bounce_count + 1'b1
   };
-  assign bounce_now_valid = ray_done_reflect && !reflect_is_final;
+  assign bounce_now_valid = ray_done_reflect && reflect_meta_valid && !reflect_is_final;
 
   assign work_empty = (work_count == 0);
   assign work_full = (work_count == WORK_FIFO_DEPTH);
@@ -339,6 +345,19 @@ module ray_tracer #(
     .out(reflect_meta_out_bits)
   );
 
+  always_ff @(posedge clk) begin
+    if (rst) begin
+      reflect_meta_valid_pipe <= '0;
+    end else begin
+      reflect_meta_valid_pipe[0] <= launch_reflector;
+      for (int i = 1; i < REFLECT_DONE_DELAY; i = i + 1) begin
+        reflect_meta_valid_pipe[i] <= reflect_meta_valid_pipe[i - 1];
+      end
+    end
+  end
+
+  assign reflect_meta_valid = reflect_meta_valid_pipe[REFLECT_DONE_DELAY - 1];
+
   assign miss_result_now_valid = intx_done_found && !done_hit_any;
   assign miss_result_now_bits = {
     done_ctx_pixel_h,
@@ -346,7 +365,7 @@ module ray_tracer #(
     done_ctx_income_light
   };
 
-  assign reflect_result_now_valid = ray_done_reflect && reflect_is_final;
+  assign reflect_result_now_valid = ray_done_reflect && reflect_meta_valid && reflect_is_final;
   assign reflect_result_now_bits = {
     reflect_meta_pixel_h,
     reflect_meta_pixel_v,
@@ -356,7 +375,9 @@ module ray_tracer #(
   assign result_head_bits = result_fifo_mem[result_read_ptr];
   assign result_empty = (result_count == 0);
   assign result_pop = !result_empty;
-  assign result_push_count = miss_result_now_valid + reflect_result_now_valid;
+  assign result_push_count =
+    {1'b0, miss_result_now_valid} +
+    {1'b0, reflect_result_now_valid};
   assign result_push0_bits = miss_result_now_valid ? miss_result_now_bits : reflect_result_now_bits;
   assign result_write_ptr_after_push0 = result_next_ptr(result_write_ptr);
 

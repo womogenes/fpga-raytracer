@@ -1,0 +1,9 @@
+{
+  "frames": 1,
+  "seed": "0x123456789abcdef123456789",
+  "total_cycles": 58883,
+  "pixel_samples": 2304,
+  "output_pixels": 2304,
+  "cycles_per_pixel_per_frame": 25.55685763888889,
+  "cycles_per_output_pixel_all_frames": 25.55685763888889
+}

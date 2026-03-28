@@ -21,7 +21,7 @@ parser.add_argument("scene", nargs="?", type=str)
 
 args = parser.parse_args()
 
-SERIAL_PORTNAME = os.environ.get("FPGA_SERIAL_PORT") or "/dev/ttyUSB2"
+SERIAL_PORTNAME = os.environ.get("FPGA_SERIAL_PORT") or "/dev/ttyUSB0"
 BAUD = 115200
 
 

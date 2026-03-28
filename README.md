@@ -37,7 +37,7 @@ If you want to test this for yourself in hardware:
    to create `data/mat_dict.mem` and `data/scene_buffer.mem`, which are required for build (else you'll render a black screen). The canonical json we used for testing is `ctrl/scenes/canonical_balls.json.`
 5. Flash to the board with
    ```
-   openFPGALoader -b genesys2 obj/final.bit
+   openFPGALoader -b genesys2 obj_rtx/final.bit
    ```
 6. Hook up the board to a display via HDMI
 7. (Optional) Install cocotb and pyserial (and a few other things; I need to add a `requirements.txt` at some point) and flash new scenes with

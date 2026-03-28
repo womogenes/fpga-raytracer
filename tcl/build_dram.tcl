@@ -37,13 +37,14 @@ read_verilog -sv $sources_sv
 # read in all (if any) verilog files:
 set sources_v [ concat \
     [ glob -nocomplain ./hdl/hdmi/*.v ] \
+    [ glob -nocomplain ./hdl/dram/cw_hdmi_clk_wiz.v ] \
 ]
 if {[llength $sources_v] > 0 } {
     read_verilog $sources_v
 }
 
 # read in constraint files:
-read_xdc ./xdc/top_level_test.xdc
+read_xdc ./xdc/top_level_dram.xdc
 
 # read in all (if any) hex memory files:
 set sources_mem [ glob -nocomplain ./data/*.mem ]
